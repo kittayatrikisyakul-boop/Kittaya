@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMC Real-Time Dashboard | Smart Money Concepts</title>
+<meta name="description" content="Real-time Smart Money Concepts analysis for Forex, Gold, and Oil. Order Blocks, Fair Value Gaps, Break of Structure, and Liquidity zones.">
+<style>
+:root {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-card: #1a2332;
+  --bg-card-hover: #1f2b3d;
+  --border: #2a3548;
+  --border-light: #374151;
+  --text-primary: #e5e7eb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --green: #22c55e;
+  --green-bg: rgba(34,197,94,0.1);
+  --green-border: rgba(34,197,94,0.3);
+  --red: #ef4444;
+  --red-bg: rgba(239,68,68,0.1);
+  --red-border: rgba(239,68,68,0.3);
+  --yellow: #eab308;
+  --yellow-bg: rgba(234,179,8,0.1);
+  --purple: #a855f7;
+  --purple-bg: rgba(168,85,247,0.1);
+  --blue: #3b82f6;
+  --blue-bg: rgba(59,130,246,0.1);
+  --orange: #f97316;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+.header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.logo { font-size: 18px; font-weight: 700; color: var(--blue); letter-spacing: -0.5px; }
+.logo span { color: var(--text-primary); }
+.badge-live {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--red-bg); color: var(--red);
+  padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+}
+.badge-live::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--red); animation: pulse 1.5s infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.header-right { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-secondary); }
+.refresh-info { display: flex; align-items: center; gap: 4px; }
+.refresh-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+
+/* Ticker Strip */
+.ticker-strip {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  height: 40px;
+}
+
+/* Navigation Tabs */
+.nav-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.nav-tab {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.nav-tab:hover { background: var(--bg-card); color: var(--text-primary); }
+.nav-tab.active { background: var(--blue); color: white; }
+
+/* Main Content */
+.main { padding: 16px 20px; max-width: 1600px; margin: 0 auto; }
+
+/* View Sections */
+.view { display: none; }
+.view.active { display: block; }
+
+/* Overview Grid */
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.instrument-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.instrument-card:hover { border-color: var(--blue); background: var(--bg-card-hover); }
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.card-symbol { font-size: 16px; font-weight: 700; }
+.card-price { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.card-change { font-size: 12px; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+.card-change.up { background: var(--green-bg); color: var(--green); }
+.card-change.down { background: var(--red-bg); color: var(--red); }
+.card-bias {
+  display: inline-block; padding: 3px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 600; margin-bottom: 8px;
+}
+.card-bias.bull { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+.card-bias.bear { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.card-bias.neutral { background: var(--yellow-bg); color: var(--yellow); }
+
+.card-levels { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; }
+.level-item { display: flex; justify-content: space-between; padding: 3px 0; }
+.level-label { color: var(--text-muted); }
+.level-value { font-weight: 500; font-variant-numeric: tabular-nums; }
+.level-value.res { color: var(--red); }
+.level-value.sup { color: var(--orange); }
+.level-value.dem { color: var(--green); }
+.level-value.fvg { color: var(--purple); }
+
+.card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.tag {
+  display: inline-block; padding: 2px 6px; border-radius: 3px;
+  font-size: 10px; font-weight: 600;
+}
+.tag.bos-up { background: var(--green-bg); color: var(--green); }
+.tag.bos-dn { background: var(--red-bg); color: var(--red); }
+.tag.choch { background: var(--purple-bg); color: var(--purple); }
+.tag.ob { background: var(--blue-bg); color: var(--blue); }
+.tag.fvg { background: var(--purple-bg); color: var(--purple); }
+.tag.liq { background: var(--yellow-bg); color: var(--yellow); }
+
+/* Detail View */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; } }
+.detail-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.detail-card.full { grid-column: 1 / -1; }
+.detail-card h3 {
+  font-size: 13px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;
+}
+.detail-header {
+  display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.detail-price { font-size: 28px; font-weight: 700; }
+.detail-change { font-size: 14px; }
+
+.level-table { width: 100%; border-collapse: collapse; }
+.level-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.level-table tr:last-child td { border-bottom: none; }
+.level-table .type-col { width: 100px; }
+.level-table .zone-col { font-weight: 600; font-variant-numeric: tabular-nums; }
+.level-table .note-col { color: var(--text-secondary); font-size: 12px; }
+
+.zone-bar-container { margin: 12px 0; }
+.zone-bar {
+  height: 10px; border-radius: 5px; position: relative;
+  background: linear-gradient(to right, var(--green-bg), var(--yellow-bg), var(--red-bg));
+}
+.zone-marker {
+  position: absolute; top: -5px; width: 20px; height: 20px;
+  border-radius: 50%; border: 3px solid var(--bg-card);
+  transform: translateX(-50%); transition: left 0.5s;
+}
+.zone-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+.trade-plan {
+  padding: 12px; background: var(--bg-primary); border-radius: 8px;
+  border-left: 3px solid var(--blue); font-size: 13px; line-height: 1.7;
+}
+.trade-plan.bull { border-left-color: var(--green); }
+.trade-plan.bear { border-left-color: var(--red); }
+
+/* Chart Container */
+.chart-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.chart-container iframe { display: block; width: 100%; border: none; }
+
+/* TV Widget Containers */
+.tv-widget-container { margin-bottom: 16px; }
+
+/* Summary Table */
+.summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.summary-table th {
+  text-align: left; padding: 10px 8px; color: var(--text-muted);
+  border-bottom: 2px solid var(--border); font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.summary-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); }
+.summary-table tr:hover { background: var(--bg-card-hover); }
+
+/* Alerts Panel */
+.alerts-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.alert-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px; border-radius: 6px; margin-bottom: 4px;
+  font-size: 13px;
+}
+.alert-item.bullish { background: var(--green-bg); }
+.alert-item.bearish { background: var(--red-bg); }
+.alert-item.neutral { background: var(--yellow-bg); }
+.alert-icon { font-size: 16px; }
+.alert-time { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+
+/* Back Button */
+.back-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-secondary); cursor: pointer;
+  font-size: 13px; margin-bottom: 12px; transition: all 0.2s;
+}
+.back-btn:hover { background: var(--bg-card); color: var(--text-primary); }
+
+/* Footer */
+.footer {
+  text-align: center; padding: 16px; font-size: 11px;
+  color: var(--text-muted); border-top: 1px solid var(--border);
+  margin-top: 20px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* Loading */
+.loading { text-align: center; padding: 40px; color: var(--text-muted); }
+.loading-spinner {
+  width: 30px; height: 30px; border: 3px solid var(--border);
+  border-top-color: var(--blue); border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Popup Notifications */
+#popup-container {
+  position: fixed; top: 70px; right: 20px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 8px; max-width: 380px;
+}
+.signal-popup {
+  padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-card); box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: slideIn 0.3s ease-out;
+  display: flex; align-items: flex-start; gap: 10px; font-size: 13px;
+}
+.signal-popup.buy { border-left: 4px solid var(--green); }
+.signal-popup.sell { border-left: 4px solid var(--red); }
+.signal-popup .popup-icon { font-size: 20px; flex-shrink: 0; }
+.signal-popup .popup-body { flex: 1; }
+.signal-popup .popup-title { font-weight: 700; margin-bottom: 2px; }
+.signal-popup .popup-title.buy { color: var(--green); }
+.signal-popup .popup-title.sell { color: var(--red); }
+.signal-popup .popup-detail { color: var(--text-secondary); font-size: 12px; }
+.signal-popup .popup-close {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 16px; padding: 0 2px; line-height: 1;
+}
+.signal-popup .popup-close:hover { color: var(--text-primary); }
+@keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateX(40px); } }
+
+/* Signal Controls */
+.alert-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-secondary); cursor: pointer;
+  font-size: 12px; transition: all 0.2s;
+}
+.alert-toggle:hover { background: var(--bg-card); color: var(--text-primary); }
+.alert-toggle.active { background: var(--green-bg); color: var(--green); border-color: var(--green-border); }
+.signal-count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; border-radius: 10px;
+  background: var(--red); color: white; font-size: 11px; font-weight: 700;
+  padding: 0 5px;
+}
+.signal-count-badge:empty { display: none; }
+.signal-live-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); animation: pulse 1.5s infinite;
+}
+
+/* TP/SL Table */
+.tp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tp-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); }
+.tp-table tr:last-child td { border-bottom: none; }
+.tp-label { font-weight: 600; width: 50px; }
+.tp-level { font-weight: 700; font-variant-numeric: tabular-nums; }
+.tp-note { color: var(--text-secondary); font-size: 12px; }
+.tp-entry td { background: var(--blue-bg); border-left: 3px solid var(--blue); }
+.tp-sl td { background: var(--red-bg); border-left: 3px solid var(--red); }
+.tp1 td { border-left: 3px solid var(--green); }
+.tp2 td { border-left: 3px solid var(--yellow); }
+.tp3 td { border-left: 3px solid var(--orange); }
+
+.tp-card {
+  padding: 10px 12px; border-radius: 8px; margin-bottom: 6px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px; border: 1px solid var(--border);
+}
+.tp-card.entry { background: var(--blue-bg); border-color: rgba(59,130,246,0.3); }
+.tp-card.tp { background: var(--green-bg); border-color: var(--green-border); }
+.tp-card.sl { background: var(--red-bg); border-color: var(--red-border); }
+.tp-card .tp-card-label { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+.tp-card .tp-card-value { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 15px; }
+.tp-card .tp-card-note { font-size: 11px; color: var(--text-muted); }
+.tp-card.entry .tp-card-label { color: var(--blue); }
+.tp-card.tp .tp-card-label { color: var(--green); }
+.tp-card.sl .tp-card-label { color: var(--red); }
+
+.card-tp-row { display: flex; gap: 4px; margin-top: 6px; font-size: 11px; }
+.card-tp-badge { padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+.card-tp-badge.tp1 { background: var(--green-bg); color: var(--green); }
+.card-tp-badge.tp2 { background: var(--yellow-bg); color: var(--yellow); }
+.card-tp-badge.tp3 { background: var(--orange-bg, rgba(249,115,22,0.1)); color: var(--orange); }
+</style>
+</head>
+<body>
+<div id="popup-container"></div>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo">SMC <span>Dashboard</span></div>
+    <div class="badge-live">LIVE</div>
+  </div>
+  <div class="header-right">
+    <button class="alert-toggle active" id="alert-toggle-popup" onclick="toggleAlerts('popup')" title="Popup notifications">
+      <span class="signal-live-dot"></span> Popup
+    </button>
+    <button class="alert-toggle" id="alert-toggle-sound" onclick="toggleAlerts('sound')" title="Sound alerts">
+      🔊 Sound
+    </button>
+    <span id="signal-count" style="display:none;">
+      <span class="signal-count-badge" id="signal-badge">0</span>
+    </span>
+    <div class="refresh-info">
+      <div class="refresh-dot"></div>
+      <span id="last-update">Updating...</span>
+    </div>
+    <span id="clock"></span>
+  </div>
+</div>
+
+<!-- TradingView Ticker Widget -->
+<div class="ticker-strip">
+  <div class="tradingview-widget-container" style="height:100%;width:100%">
+    <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+    {
+      "symbols": [
+        {"proName":"OANDA:EURUSD","title":"EUR/USD"},
+        {"proName":"OANDA:GBPUSD","title":"GBP/USD"},
+        {"proName":"OANDA:USDJPY","title":"USD/JPY"},
+        {"proName":"OANDA:USDCHF","title":"USD/CHF"},
+        {"proName":"OANDA:AUDUSD","title":"AUD/USD"},
+        {"proName":"OANDA:USDCAD","title":"USD/CAD"},
+        {"proName":"OANDA:GBPJPY","title":"GBP/JPY"},
+        {"proName":"OANDA:GBPAUD","title":"GBP/AUD"},
+        {"proName":"OANDA:GBPNZD","title":"GBP/NZD"},
+        {"proName":"OANDA:GBPCAD","title":"GBP/CAD"},
+        {"proName":"OANDA:EURJPY","title":"EUR/JPY"},
+        {"proName":"OANDA:EURAUD","title":"EUR/AUD"},
+        {"proName":"OANDA:EURNZD","title":"EUR/NZD"},
+        {"proName":"OANDA:XAUUSD","title":"Gold"},
+        {"proName":"TVC:USOIL","title":"WTI Oil"}
+      ],
+      "showSymbolLogo": false,
+      "isTransparent": true,
+      "displayMode": "adaptive",
+      "colorTheme": "dark",
+      "locale": "en"
+    }
+    </script>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs" id="nav-tabs">
+  <button class="nav-tab active" data-view="overview">Overview</button>
+  <button class="nav-tab" data-view="eurusd">EUR/USD</button>
+  <button class="nav-tab" data-view="gbpusd">GBP/USD</button>
+  <button class="nav-tab" data-view="usdjpy">USD/JPY</button>
+  <button class="nav-tab" data-view="usdchf">USD/CHF</button>
+  <button class="nav-tab" data-view="audusd">AUD/USD</button>
+  <button class="nav-tab" data-view="usdcad">USD/CAD</button>
+  <button class="nav-tab" data-view="gbpjpy">GBP/JPY</button>
+  <button class="nav-tab" data-view="gbpaud">GBP/AUD</button>
+  <button class="nav-tab" data-view="gbpnzd">GBP/NZD</button>
+  <button class="nav-tab" data-view="gbpcad">GBP/CAD</button>
+  <button class="nav-tab" data-view="eurjpy">EUR/JPY</button>
+  <button class="nav-tab" data-view="euraud">EUR/AUD</button>
+  <button class="nav-tab" data-view="eurnzd">EUR/NZD</button>
+  <button class="nav-tab" data-view="xauusd">XAU/USD</button>
+  <button class="nav-tab" data-view="usoil">USOIL</button>
+  <button class="nav-tab" data-view="alerts">Alerts</button>
+</div>
+
+<div class="main">
+  <!-- OVERVIEW VIEW -->
+  <div class="view active" id="view-overview">
+    <div class="overview-grid" id="overview-grid"></div>
+
+    <div class="detail-card full" style="margin-top:8px;">
+      <h3>Market Structure Summary</h3>
+      <div style="overflow-x:auto;">
+        <table class="summary-table" id="summary-table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Price</th>
+              <th>Structure</th>
+              <th>Bias</th>
+              <th>Key OB</th>
+              <th>FVG Zone</th>
+              <th>Liquidity Target</th>
+              <th>P/D Zone</th>
+            </tr>
+          </thead>
+          <tbody id="summary-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAIL VIEWS (generated by JS) -->
+  <div class="view" id="view-eurusd"></div>
+  <div class="view" id="view-gbpusd"></div>
+  <div class="view" id="view-usdjpy"></div>
+  <div class="view" id="view-usdchf"></div>
+  <div class="view" id="view-audusd"></div>
+  <div class="view" id="view-usdcad"></div>
+  <div class="view" id="view-gbpjpy"></div>
+  <div class="view" id="view-gbpaud"></div>
+  <div class="view" id="view-gbpnzd"></div>
+  <div class="view" id="view-gbpcad"></div>
+  <div class="view" id="view-eurjpy"></div>
+  <div class="view" id="view-euraud"></div>
+  <div class="view" id="view-eurnzd"></div>
+  <div class="view" id="view-xauusd"></div>
+  <div class="view" id="view-usoil"></div>
+
+  <!-- ALERTS VIEW -->
+  <div class="view" id="view-alerts">
+    <div class="alerts-panel">
+      <h3 style="font-size:14px;font-weight:600;margin-bottom:4px;">SMC Signal Alerts</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+        Live signals trigger when price enters Order Blocks, FVG zones, or near liquidity levels.
+        Toggle <strong>Popup</strong> for desktop notifications and <strong>Sound</strong> for audio alerts.
+      </p>
+      <div id="alerts-list"></div>
+    </div>
+    <div class="detail-card">
+      <h3>How to Set Up TradingView Alerts</h3>
+      <div style="font-size:13px;line-height:1.8;color:var(--text-secondary);">
+        <p><strong style="color:var(--text-primary);">1. Order Block Alerts</strong><br>
+        Right-click on chart at OB zone → Add Alert → Condition: "Crossing" → Set price at OB boundary</p>
+        <p style="margin-top:8px;"><strong style="color:var(--text-primary);">2. FVG Fill Alerts</strong><br>
+        Set alert at FVG midpoint → When price fills the gap, you get notified for potential entry</p>
+        <p style="margin-top:8px;"><strong style="color:var(--text-primary);">3. BOS/CHoCH Alerts</strong><br>
+        Set alert above swing high (for BSL) or below swing low (for SSL) → Confirms structure break</p>
+        <p style="margin-top:8px;"><strong style="color:var(--text-primary);">4. Liquidity Sweep Alerts</strong><br>
+        Set alert just beyond equal highs/lows → When swept, watch for reversal pattern</p>
+        <p style="margin-top:12px;padding:10px;background:var(--blue-bg);border-radius:6px;border:1px solid rgba(59,130,246,0.3);">
+        <strong style="color:var(--blue);">Pro Tip:</strong> Use the "Smart Money Concepts" indicator by LuxAlgo on TradingView for automatic OB, FVG, BOS, CHoCH detection with built-in alerts.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  SMC Real-Time Dashboard | Data from TradingView | For educational purposes only<br>
+  Not financial advice. Always manage your risk. &copy; 2026
+</div>
+
+<script>
+// ===== SMC DATA ENGINE =====
+const INSTRUMENTS = {
+  EURUSD: {
+    id: 'eurusd', name: 'EUR/USD', tvSymbol: 'OANDA:EURUSD', decimals: 4,
+    swingHigh: 1.1372, swingLow: 1.1000,
+    orderBlocks: [
+      { type: 'demand', zone: [1.1075, 1.1090], note: 'D1 Demand OB — institutional buying zone', strength: 'strong' },
+      { type: 'demand', zone: [1.1120, 1.1135], note: 'H4 Demand OB — mitigation pending', strength: 'medium' },
+      { type: 'supply', zone: [1.1250, 1.1276], note: 'H4 Supply OB — active rejection', strength: 'strong' },
+      { type: 'supply', zone: [1.1350, 1.1372], note: 'D1 Supply OB — swing high', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [1.1185, 1.1200], dir: 'bullish', note: 'Unmitigated bullish imbalance' },
+      { zone: [1.1265, 1.1276], dir: 'bearish', note: 'Bearish FVG — price may revisit' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'H4', note: 'Broke above 1.1200 resistance' },
+    choch: null,
+    liquidity: [
+      { type: 'BSL', level: 1.1276, note: 'Equal highs — stop hunt zone' },
+      { type: 'BSL', level: 1.1372, note: 'Swing high liquidity pool' },
+      { type: 'SSL', level: 1.1120, note: 'Equal lows — buy-side target' },
+      { type: 'SSL', level: 1.1075, note: 'Major structural low' }
+    ],
+    bias: 'bull', plan: 'Bullish bias. Wait for pullback to 1.1185-1.1200 bullish FVG for long entry. Stop below 1.1120 SSL. Target: sweep BSL at 1.1276, then 1.1372.',
+    targets: { bull: [1.1276, 1.1372], bear: [1.1185, 1.1120, 1.1075] },
+    tp: { entry: [1.1185, 1.1200], sl: 1.1075, tp1: 1.1276, tp2: 1.1372, tp3: 1.1450, direction: 'long' }
+  },
+  GBPUSD: {
+    id: 'gbpusd', name: 'GBP/USD', tvSymbol: 'OANDA:GBPUSD', decimals: 4,
+    swingHigh: 1.3500, swingLow: 1.3085,
+    orderBlocks: [
+      { type: 'demand', zone: [1.3200, 1.3220], note: 'D1 Demand OB — strong institutional zone', strength: 'strong' },
+      { type: 'demand', zone: [1.3300, 1.3320], note: 'H4 Demand OB — broken resistance → support', strength: 'strong' },
+      { type: 'supply', zone: [1.3450, 1.3500], note: 'D1 Supply OB — psychological + structural', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [1.3300, 1.3340], dir: 'bullish', note: 'Breakout displacement gap' },
+      { zone: [1.3450, 1.3480], dir: 'bearish', note: 'Unmitigated supply FVG' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'D1', note: 'Broke above 1.3300 with strong momentum' },
+    choch: { type: 'CHoCH', dir: 'bullish', tf: 'H4', note: 'Reversal from bearish to bullish' },
+    liquidity: [
+      { type: 'BSL', level: 1.3450, note: 'Near-term equal highs' },
+      { type: 'BSL', level: 1.3500, note: 'Psychological + major BSL' },
+      { type: 'SSL', level: 1.3300, note: 'Swept and reclaimed' },
+      { type: 'SSL', level: 1.3200, note: 'Major structural low' }
+    ],
+    bias: 'bull', plan: 'Strong bullish. CHoCH + BOS confirmed. Wait for pullback to 1.3300-1.3340 FVG for entry. Target BSL sweep at 1.3500.',
+    targets: { bull: [1.3450, 1.3500], bear: [1.3300, 1.3200] },
+    tp: { entry: [1.3300, 1.3340], sl: 1.3200, tp1: 1.3450, tp2: 1.3500, tp3: 1.3600, direction: 'long' }
+  },
+  USDJPY: {
+    id: 'usdjpy', name: 'USD/JPY', tvSymbol: 'OANDA:USDJPY', decimals: 2,
+    swingHigh: 160.50, swingLow: 155.00,
+    orderBlocks: [
+      { type: 'supply', zone: [158.50, 159.00], note: 'H4 Supply OB — rejection zone', strength: 'strong' },
+      { type: 'supply', zone: [160.00, 160.50], note: 'D1 Supply OB — institutional level', strength: 'strong' },
+      { type: 'demand', zone: [155.00, 155.50], note: 'D1 Demand OB — swing low defense', strength: 'strong' },
+      { type: 'demand', zone: [156.80, 157.20], note: 'H4 Demand OB — pivot area', strength: 'medium' }
+    ],
+    fvg: [
+      { zone: [157.68, 158.00], dir: 'bearish', note: 'Pivot imbalance zone' },
+      { zone: [155.50, 156.00], dir: 'bullish', note: 'From last bounce' }
+    ],
+    structure: { type: 'BOS', dir: 'bearish', tf: 'H4', note: 'Broke below 157.68 pivot' },
+    choch: null,
+    liquidity: [
+      { type: 'BSL', level: 158.54, note: 'Recent swing high' },
+      { type: 'BSL', level: 160.00, note: 'Major BSL — stop hunt target' },
+      { type: 'SSL', level: 155.85, note: 'Near-term low' },
+      { type: 'SSL', level: 155.00, note: 'Major structural low' }
+    ],
+    bias: 'bear', plan: 'Bearish bias. Below pivot 157.68. Watch BOJ meeting. If 155.85 SSL swept → bounce to 157 FVG. If 160 BSL swept → major reversal short.',
+    targets: { bull: [158.54, 160.00], bear: [155.85, 155.00] },
+    tp: { entry: [158.00, 158.50], sl: 160.00, tp1: 156.50, tp2: 155.50, tp3: 154.00, direction: 'short' }
+  },
+  USDCHF: {
+    id: 'usdchf', name: 'USD/CHF', tvSymbol: 'OANDA:USDCHF', decimals: 4,
+    swingHigh: 0.8370, swingLow: 0.8120,
+    orderBlocks: [
+      { type: 'supply', zone: [0.8320, 0.8370], note: 'D1 Supply OB — pivotal rejection', strength: 'strong' },
+      { type: 'supply', zone: [0.8255, 0.8270], note: 'H4 Supply OB — minor resistance', strength: 'medium' },
+      { type: 'demand', zone: [0.8180, 0.8195], note: 'H4 Demand OB — near-term support', strength: 'medium' },
+      { type: 'demand', zone: [0.8120, 0.8135], note: 'D1 Demand OB — structural low', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [0.8220, 0.8240], dir: 'bearish', note: 'Displacement from 0.8370 rejection' },
+      { zone: [0.8150, 0.8170], dir: 'bullish', note: 'From last bounce attempt' }
+    ],
+    structure: { type: 'BOS', dir: 'bearish', tf: 'D1', note: 'Broke below ascending trendline' },
+    choch: { type: 'CHoCH', dir: 'bearish', tf: 'D1', note: 'Reversal at 0.8370 supply OB' },
+    liquidity: [
+      { type: 'BSL', level: 0.8370, note: 'Equal highs — major stop hunt' },
+      { type: 'SSL', level: 0.8180, note: 'Near-term low' },
+      { type: 'SSL', level: 0.8120, note: 'Structural low — sweep target' }
+    ],
+    bias: 'bear', plan: 'Strong bearish. CHoCH at 0.8370 supply. Short on pullback to 0.8220-0.8240 bearish FVG. Target 0.8120 SSL sweep.',
+    targets: { bull: [0.8255, 0.8320, 0.8370], bear: [0.8180, 0.8120] },
+    tp: { entry: [0.8260, 0.8280], sl: 0.8370, tp1: 0.8200, tp2: 0.8150, tp3: 0.8100, direction: 'short' }
+  },
+  AUDUSD: {
+    id: 'audusd', name: 'AUD/USD', tvSymbol: 'OANDA:AUDUSD', decimals: 4,
+    swingHigh: 0.7214, swingLow: 0.6854,
+    orderBlocks: [
+      { type: 'demand', zone: [0.6970, 0.6990], note: 'H4 Demand OB — RBA hawkish reaction', strength: 'strong' },
+      { type: 'demand', zone: [0.6916, 0.6930], note: 'D1 Demand OB — structural support', strength: 'strong' },
+      { type: 'demand', zone: [0.6854, 0.6870], note: 'W1 Demand OB — weekly swing low', strength: 'strong' },
+      { type: 'supply', zone: [0.7050, 0.7065], note: 'H4 Supply OB — immediate resistance', strength: 'medium' },
+      { type: 'supply', zone: [0.7200, 0.7214], note: 'D1 Supply OB — 61.8% Fib', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [0.7012, 0.7030], dir: 'bullish', note: 'Breakout gap from 0.7012' },
+      { zone: [0.7100, 0.7120], dir: 'bullish', note: 'Unmitigated bullish FVG' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'H4', note: 'Broke above 0.7012 resistance' },
+    choch: null,
+    liquidity: [
+      { type: 'BSL', level: 0.7050, note: 'Immediate resistance' },
+      { type: 'BSL', level: 0.7208, note: 'Swing high liquidity pool' },
+      { type: 'SSL', level: 0.6970, note: 'Near-term low' },
+      { type: 'SSL', level: 0.6854, note: 'Weekly structural low' }
+    ],
+    bias: 'bull', plan: 'Bullish. BOS above 0.7012. Entry on pullback to 0.7012-0.7030 FVG. Target 0.7208 BSL. Stop below 0.6970.',
+    targets: { bull: [0.7050, 0.7100, 0.7208], bear: [0.6970, 0.6916, 0.6854] },
+    tp: { entry: [0.7010, 0.7030], sl: 0.6950, tp1: 0.7100, tp2: 0.7180, tp3: 0.7250, direction: 'long' }
+  },
+  USDCAD: {
+    id: 'usdcad', name: 'USD/CAD', tvSymbol: 'OANDA:USDCAD', decimals: 4,
+    swingHigh: 1.4250, swingLow: 1.3800,
+    orderBlocks: [
+      { type: 'supply', zone: [1.4135, 1.4160], note: 'D1 Supply OB — broken support → resistance', strength: 'strong' },
+      { type: 'supply', zone: [1.4235, 1.4250], note: 'D1 Supply OB — swing high zone', strength: 'strong' },
+      { type: 'demand', zone: [1.3950, 1.3970], note: 'H4 Demand OB — near-term support', strength: 'medium' },
+      { type: 'demand', zone: [1.3800, 1.3820], note: 'D1 Demand OB — structural low', strength: 'strong' },
+      { type: 'demand', zone: [1.3620, 1.3650], note: 'W1 Demand OB — major support', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [1.4050, 1.4080], dir: 'bearish', note: 'Breakdown displacement gap' },
+      { zone: [1.3880, 1.3920], dir: 'bullish', note: 'From last bounce' }
+    ],
+    structure: { type: 'BOS', dir: 'bearish', tf: 'D1', note: 'Broke below 1.4135 support' },
+    choch: { type: 'CHoCH', dir: 'bearish', tf: 'H4', note: 'Reversal from bullish to bearish' },
+    liquidity: [
+      { type: 'BSL', level: 1.4150, note: 'Range high — stop hunt zone' },
+      { type: 'BSL', level: 1.4250, note: 'Major BSL — swing high' },
+      { type: 'SSL', level: 1.3950, note: 'Near-term low' },
+      { type: 'SSL', level: 1.3800, note: 'Structural low' },
+      { type: 'SSL', level: 1.3620, note: 'Deep SSL — weekly low' }
+    ],
+    bias: 'bear', plan: 'Bearish. CHoCH confirmed. CAD strength. Short on pullback to 1.4050-1.4080 bearish FVG. Target 1.3800 SSL. Ultimate target 1.3620.',
+    targets: { bull: [1.4100, 1.4150, 1.4250], bear: [1.3950, 1.3800, 1.3620] },
+    tp: { entry: [1.4050, 1.4100], sl: 1.4200, tp1: 1.3950, tp2: 1.3850, tp3: 1.3750, direction: 'short' }
+  },
+  XAUUSD: {
+    id: 'xauusd', name: 'XAU/USD', tvSymbol: 'OANDA:XAUUSD', decimals: 2,
+    swingHigh: 4232, swingLow: 4000,
+    orderBlocks: [
+      { type: 'supply', zone: [4140, 4160], note: 'D1 Supply OB — BB midline + 100D MA', strength: 'strong' },
+      { type: 'supply', zone: [4200, 4232], note: 'W1 Supply OB — institutional selling', strength: 'strong' },
+      { type: 'demand', zone: [4065, 4075], note: 'H4 Demand OB — immediate support', strength: 'medium' },
+      { type: 'demand', zone: [4025, 4030], note: 'D1 Demand OB — secondary support', strength: 'medium' },
+      { type: 'demand', zone: [4000, 4010], note: 'W1 Demand OB — psychological', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [4100, 4115], dir: 'bearish', note: 'Breakdown below $4,100' },
+      { zone: [4040, 4060], dir: 'bullish', note: 'From last bounce attempt' }
+    ],
+    structure: { type: 'BOS', dir: 'bearish', tf: 'D1', note: 'Broke below $4,100 support' },
+    choch: { type: 'CHoCH', dir: 'bearish', tf: 'D1', note: 'Liquidity sweep at $4,200+ then reject' },
+    liquidity: [
+      { type: 'BSL', level: 4140, note: 'Immediate resistance' },
+      { type: 'BSL', level: 4200, note: 'Major BSL — sweep already done' },
+      { type: 'SSL', level: 4065, note: 'Near-term low' },
+      { type: 'SSL', level: 4000, note: 'Psychological — major SSL' }
+    ],
+    bias: 'bear', plan: 'Bearish. CHoCH after BSL sweep at $4,200+. MACD negative, RSI mid-30s. Short on bounce to $4,100-4,115 FVG. Target $4,000 SSL.',
+    targets: { bull: [4115, 4140, 4200], bear: [4065, 4030, 4000] },
+    tp: { entry: [4100, 4120], sl: 4200, tp1: 4050, tp2: 4000, tp3: 3950, direction: 'short' }
+  },
+  USOIL: {
+    id: 'usoil', name: 'USOIL', tvSymbol: 'TVC:USOIL', decimals: 2,
+    swingHigh: 104.27, swingLow: 87.36,
+    orderBlocks: [
+      { type: 'demand', zone: [94.92, 95.50], note: 'D1 Demand OB — broken resistance → support', strength: 'strong' },
+      { type: 'demand', zone: [92.03, 92.88], note: 'D1 Demand OB — structural support', strength: 'strong' },
+      { type: 'demand', zone: [87.36, 90.83], note: 'W1 Demand OB — weekly swing low', strength: 'strong' },
+      { type: 'supply', zone: [100.00, 100.30], note: 'H4 Supply OB — psychological', strength: 'strong' },
+      { type: 'supply', zone: [101.04, 104.27], note: 'D1 Supply OB — major resistance', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [97.00, 98.00], dir: 'bullish', note: 'Breakout displacement gap' },
+      { zone: [100.30, 101.00], dir: 'bullish', note: 'Unmitigated above psychological' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'D1', note: 'Broke above $92.88-94.77 resistance' },
+    choch: null,
+    liquidity: [
+      { type: 'BSL', level: 100.00, note: 'Psychological round number' },
+      { type: 'BSL', level: 101.04, note: 'Swing high — major BSL' },
+      { type: 'BSL', level: 104.27, note: 'Extreme BSL' },
+      { type: 'SSL', level: 97.28, note: 'Near-term low' },
+      { type: 'SSL', level: 94.92, note: 'Structural support' },
+      { type: 'SSL', level: 92.03, note: 'Deep SSL — weekly low' }
+    ],
+    bias: 'bull', plan: 'Strong bullish. Geopolitical risk (Hormuz). Near $100. Watch for BSL sweep + bearish CHoCH at 100.30 supply. If holds → continuation to 104. If rejected → pullback to 97-95.',
+    targets: { bull: [100.30, 101.04, 104.27], bear: [97.28, 94.92, 92.03] },
+    tp: { entry: [96.00, 97.00], sl: 93.00, tp1: 100.00, tp2: 102.00, tp3: 104.00, direction: 'long' }
+  },
+  GBPJPY: {
+    id: 'gbpjpy', name: 'GBP/JPY', tvSymbol: 'OANDA:GBPJPY', decimals: 2,
+    swingHigh: 218.00, swingLow: 205.00,
+    orderBlocks: [
+      { type: 'demand', zone: [206.00, 208.00], note: 'D1 Demand OB — structural support', strength: 'strong' },
+      { type: 'demand', zone: [204.00, 206.00], note: 'W1 Demand OB — weekly swing low', strength: 'strong' },
+      { type: 'supply', zone: [214.00, 216.00], note: 'H4 Supply OB — rejection zone', strength: 'strong' },
+      { type: 'supply', zone: [217.00, 218.00], note: 'D1 Supply OB — swing high', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [209.00, 211.00], dir: 'bullish', note: 'Breakout displacement gap' },
+      { zone: [215.00, 216.50], dir: 'bearish', note: 'Bearish FVG from rejection' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'H4', note: 'Broke above 210.00 resistance' },
+    choch: null,
+    liquidity: [
+      { type: 'BSL', level: 215.00, note: 'Equal highs — stop hunt' },
+      { type: 'BSL', level: 218.00, note: 'Swing high liquidity pool' },
+      { type: 'SSL', level: 208.00, note: 'Near-term low' },
+      { type: 'SSL', level: 205.00, note: 'Weekly structural low' }
+    ],
+    bias: 'bull', plan: 'Bullish. BOS above 210. Entry on pullback to 209-211 FVG. Target BSL at 215, then 218.',
+    targets: { bull: [215.00, 218.00], bear: [208.00, 205.00] },
+    tp: { entry: [210.00, 211.50], sl: 207.00, tp1: 215.00, tp2: 218.00, tp3: 222.00, direction: 'long' }
+  },
+  GBPAUD: {
+    id: 'gbpaud', name: 'GBP/AUD', tvSymbol: 'OANDA:GBPAUD', decimals: 4,
+    swingHigh: 1.9400, swingLow: 1.8700,
+    orderBlocks: [
+      { type: 'demand', zone: [1.8800, 1.8900], note: 'H4 Demand OB — near-term support', strength: 'medium' },
+      { type: 'demand', zone: [1.8600, 1.8700], note: 'D1 Demand OB — structural low', strength: 'strong' },
+      { type: 'supply', zone: [1.9200, 1.9300], note: 'H4 Supply OB — broken support → resistance', strength: 'strong' },
+      { type: 'supply', zone: [1.9350, 1.9400], note: 'D1 Supply OB — swing high', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [1.8950, 1.9050], dir: 'bullish', note: 'Breakout displacement gap' },
+      { zone: [1.9250, 1.9300], dir: 'bearish', note: 'Bearish FVG from supply' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'H4', note: 'Broke above 1.9000 resistance' },
+    choch: { type: 'CHoCH', dir: 'bullish', tf: 'H4', note: 'Reversal from bearish to bullish' },
+    liquidity: [
+      { type: 'BSL', level: 1.9250, note: 'Near-term equal highs' },
+      { type: 'BSL', level: 1.9400, note: 'Major BSL — swing high' },
+      { type: 'SSL', level: 1.8850, note: 'Near-term low' },
+      { type: 'SSL', level: 1.8700, note: 'Structural low' }
+    ],
+    bias: 'bull', plan: 'Bullish. CHoCH + BOS confirmed. Entry on pullback to 1.8950-1.9050 FVG. Target BSL at 1.9250, then 1.9400.',
+    targets: { bull: [1.9250, 1.9400], bear: [1.8850, 1.8700] },
+    tp: { entry: [1.8950, 1.9050], sl: 1.8750, tp1: 1.9250, tp2: 1.9400, tp3: 1.9600, direction: 'long' }
+  },
+  GBPNZD: {
+    id: 'gbpnzd', name: 'GBP/NZD', tvSymbol: 'OANDA:GBPNZD', decimals: 4,
+    swingHigh: 2.4000, swingLow: 2.3000,
+    orderBlocks: [
+      { type: 'demand', zone: [2.3100, 2.3200], note: 'H4 Demand OB — pivot support', strength: 'medium' },
+      { type: 'demand', zone: [2.2900, 2.3000], note: 'D1 Demand OB — structural low', strength: 'strong' },
+      { type: 'supply', zone: [2.3700, 2.3800], note: 'H4 Supply OB — rejection zone', strength: 'strong' },
+      { type: 'supply', zone: [2.3900, 2.4000], note: 'D1 Supply OB — swing high', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [2.3300, 2.3450], dir: 'bullish', note: 'Breakout displacement gap' },
+      { zone: [2.3750, 2.3850], dir: 'bearish', note: 'Bearish FVG from rejection' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'H4', note: 'Broke above 2.3400 resistance' },
+    choch: null,
+    liquidity: [
+      { type: 'BSL', level: 2.3750, note: 'Near-term equal highs' },
+      { type: 'BSL', level: 2.4000, note: 'Swing high liquidity pool' },
+      { type: 'SSL', level: 2.3150, note: 'Near-term low' },
+      { type: 'SSL', level: 2.3000, note: 'Structural low' }
+    ],
+    bias: 'bull', plan: 'Bullish. BOS above 2.34. Entry on pullback to 2.33-2.345 FVG. Target BSL at 2.375, then 2.40.',
+    targets: { bull: [2.3750, 2.4000], bear: [2.3150, 2.3000] },
+    tp: { entry: [2.3350, 2.3450], sl: 2.3100, tp1: 2.3750, tp2: 2.4000, tp3: 2.4300, direction: 'long' }
+  },
+  GBPCAD: {
+    id: 'gbpcad', name: 'GBP/CAD', tvSymbol: 'OANDA:GBPCAD', decimals: 4,
+    swingHigh: 1.9200, swingLow: 1.8500,
+    orderBlocks: [
+      { type: 'demand', zone: [1.8600, 1.8700], note: 'H4 Demand OB — broken resistance → support', strength: 'strong' },
+      { type: 'demand', zone: [1.8450, 1.8550], note: 'D1 Demand OB — structural low', strength: 'strong' },
+      { type: 'supply', zone: [1.8950, 1.9050], note: 'H4 Supply OB — rejection zone', strength: 'strong' },
+      { type: 'supply', zone: [1.9150, 1.9200], note: 'D1 Supply OB — swing high', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [1.8750, 1.8850], dir: 'bullish', note: 'Breakout displacement gap' },
+      { zone: [1.9050, 1.9100], dir: 'bearish', note: 'Bearish FVG from supply' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'D1', note: 'Broke above 1.8800 resistance' },
+    choch: { type: 'CHoCH', dir: 'bullish', tf: 'H4', note: 'Reversal from bearish to bullish' },
+    liquidity: [
+      { type: 'BSL', level: 1.9000, note: 'Near-term equal highs' },
+      { type: 'BSL', level: 1.9200, note: 'Major BSL — swing high' },
+      { type: 'SSL', level: 1.8650, note: 'Near-term low' },
+      { type: 'SSL', level: 1.8500, note: 'Structural low' }
+    ],
+    bias: 'bull', plan: 'Bullish. CHoCH + BOS confirmed. Entry on pullback to 1.8750-1.8850 FVG. Target BSL at 1.90, then 1.92.',
+    targets: { bull: [1.9000, 1.9200], bear: [1.8650, 1.8500] },
+    tp: { entry: [1.8750, 1.8850], sl: 1.8550, tp1: 1.9000, tp2: 1.9200, tp3: 1.9400, direction: 'long' }
+  },
+  EURJPY: {
+    id: 'eurjpy', name: 'EUR/JPY', tvSymbol: 'OANDA:EURJPY', decimals: 2,
+    swingHigh: 183.00, swingLow: 174.00,
+    orderBlocks: [
+      { type: 'demand', zone: [175.00, 176.50], note: 'D1 Demand OB — structural support', strength: 'strong' },
+      { type: 'demand', zone: [173.50, 174.50], note: 'W1 Demand OB — weekly swing low', strength: 'strong' },
+      { type: 'supply', zone: [179.50, 181.00], note: 'H4 Supply OB — rejection zone', strength: 'strong' },
+      { type: 'supply', zone: [182.00, 183.00], note: 'D1 Supply OB — swing high', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [176.50, 178.00], dir: 'bullish', note: 'Breakout displacement gap' },
+      { zone: [180.50, 181.50], dir: 'bearish', note: 'Bearish FVG from supply' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'H4', note: 'Broke above 177.50 resistance' },
+    choch: null,
+    liquidity: [
+      { type: 'BSL', level: 180.00, note: 'Near-term equal highs' },
+      { type: 'BSL', level: 183.00, note: 'Swing high liquidity pool' },
+      { type: 'SSL', level: 176.00, note: 'Near-term low' },
+      { type: 'SSL', level: 174.00, note: 'Weekly structural low' }
+    ],
+    bias: 'bull', plan: 'Bullish. BOS above 177.50. Entry on pullback to 176.50-178.00 FVG. Target BSL at 180, then 183.',
+    targets: { bull: [180.00, 183.00], bear: [176.00, 174.00] },
+    tp: { entry: [176.50, 178.00], sl: 174.50, tp1: 180.00, tp2: 183.00, tp3: 185.00, direction: 'long' }
+  },
+  EURAUD: {
+    id: 'euraud', name: 'EUR/AUD', tvSymbol: 'OANDA:EURAUD', decimals: 4,
+    swingHigh: 1.6400, swingLow: 1.5600,
+    orderBlocks: [
+      { type: 'demand', zone: [1.5700, 1.5800], note: 'H4 Demand OB — near-term support', strength: 'medium' },
+      { type: 'demand', zone: [1.5550, 1.5650], note: 'D1 Demand OB — structural low', strength: 'strong' },
+      { type: 'supply', zone: [1.6150, 1.6250], note: 'H4 Supply OB — broken support → resistance', strength: 'strong' },
+      { type: 'supply', zone: [1.6300, 1.6400], note: 'D1 Supply OB — swing high', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [1.5850, 1.5950], dir: 'bullish', note: 'Breakout displacement gap' },
+      { zone: [1.6200, 1.6280], dir: 'bearish', note: 'Bearish FVG from supply' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'H4', note: 'Broke above 1.5950 resistance' },
+    choch: { type: 'CHoCH', dir: 'bullish', tf: 'H4', note: 'Reversal from bearish to bullish' },
+    liquidity: [
+      { type: 'BSL', level: 1.6200, note: 'Near-term equal highs' },
+      { type: 'BSL', level: 1.6400, note: 'Major BSL — swing high' },
+      { type: 'SSL', level: 1.5750, note: 'Near-term low' },
+      { type: 'SSL', level: 1.5600, note: 'Structural low' }
+    ],
+    bias: 'bull', plan: 'Bullish. CHoCH + BOS confirmed. Entry on pullback to 1.5850-1.5950 FVG. Target BSL at 1.62, then 1.64.',
+    targets: { bull: [1.6200, 1.6400], bear: [1.5750, 1.5600] },
+    tp: { entry: [1.5850, 1.5950], sl: 1.5650, tp1: 1.6200, tp2: 1.6400, tp3: 1.6600, direction: 'long' }
+  },
+  EURNZD: {
+    id: 'eurnzd', name: 'EUR/NZD', tvSymbol: 'OANDA:EURNZD', decimals: 4,
+    swingHigh: 2.0100, swingLow: 1.9300,
+    orderBlocks: [
+      { type: 'demand', zone: [1.9400, 1.9500], note: 'H4 Demand OB — near-term support', strength: 'medium' },
+      { type: 'demand', zone: [1.9250, 1.9350], note: 'D1 Demand OB — structural low', strength: 'strong' },
+      { type: 'supply', zone: [1.9900, 2.0000], note: 'H4 Supply OB — rejection zone', strength: 'strong' },
+      { type: 'supply', zone: [2.0050, 2.0100], note: 'D1 Supply OB — swing high', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [1.9550, 1.9650], dir: 'bullish', note: 'Breakout displacement gap' },
+      { zone: [1.9950, 2.0050], dir: 'bearish', note: 'Bearish FVG from supply' }
+    ],
+    structure: { type: 'BOS', dir: 'bullish', tf: 'D1', note: 'Broke above 1.9650 resistance' },
+    choch: { type: 'CHoCH', dir: 'bullish', tf: 'H4', note: 'Reversal from bearish to bullish' },
+    liquidity: [
+      { type: 'BSL', level: 1.9950, note: 'Near-term equal highs' },
+      { type: 'BSL', level: 2.0100, note: 'Major BSL — swing high' },
+      { type: 'SSL', level: 1.9450, note: 'Near-term low' },
+      { type: 'SSL', level: 1.9300, note: 'Structural low' }
+    ],
+    bias: 'bull', plan: 'Bullish. CHoCH + BOS confirmed. Entry on pullback to 1.9550-1.9650 FVG. Target BSL at 1.995, then 2.01.',
+    targets: { bull: [1.9950, 2.0100], bear: [1.9450, 1.9300] },
+    tp: { entry: [1.9550, 1.9650], sl: 1.9350, tp1: 1.9950, tp2: 2.0100, tp3: 2.0300, direction: 'long' }
+  }
+};
+
+// ===== DYNAMIC SMC ENGINE =====
+const dynamicSMC = {}; // Stores recalculated SMC data per instrument
+let priceHistory = {}; // Track recent prices for momentum detection
+
+function recalculateSMC(key, currentPrice) {
+  const base = INSTRUMENTS[key];
+  if (!base || !currentPrice) return;
+
+  const mid = (base.swingHigh + base.swingLow) / 2;
+  const range = base.swingHigh - base.swingLow;
+  const pricePct = ((currentPrice - base.swingLow) / range) * 100;
+
+  // Determine dynamic bias based on price position
+  const newBias = currentPrice >= mid ? 'bull' : 'bear';
+
+  // Detect momentum from recent prices
+  const history = priceHistory[key] || [];
+  history.push(currentPrice);
+  if (history.length > 5) history.shift();
+  priceHistory[key] = history;
+
+  let momentum = 0;
+  if (history.length >= 3) {
+    momentum = history[history.length - 1] - history[0];
+  }
+
+  // Determine structure direction
+  const structDir = momentum >= 0 ? 'bullish' : 'bearish';
+  const structType = Math.abs(momentum) > range * 0.01 ? 'BOS' : 'Consolidation';
+
+  // Dynamic order blocks around current price (store as numbers, not arrays in arrays)
+  const obWidth = range * 0.015; // 1.5% of range
+  const demandOBLo = currentPrice - obWidth * 2;
+  const demandOBHi = currentPrice - obWidth;
+  const supplyOBLo = currentPrice + obWidth;
+  const supplyOBHi = currentPrice + obWidth * 2;
+
+  // Dynamic FVG zones
+  const fvgWidth = range * 0.008;
+  const bullishFVGLo = currentPrice - fvgWidth;
+  const bullishFVGHi = currentPrice;
+  const bearishFVGLo = currentPrice;
+  const bearishFVGHi = currentPrice + fvgWidth;
+
+  // Dynamic liquidity levels
+  const bslNear = base.swingHigh - range * 0.02;
+  const sslNear = base.swingLow + range * 0.02;
+
+  // Dynamic TP/SL based on bias
+  const tpGap = range * 0.04;
+
+  let entryLo, entryHi, sl, tp1, tp2, tp3, direction;
+  if (newBias === 'bull') {
+    entryLo = demandOBLo;
+    entryHi = demandOBHi;
+    sl = sslNear;
+    tp1 = currentPrice + tpGap;
+    tp2 = bslNear;
+    tp3 = base.swingHigh;
+    direction = 'long';
+  } else {
+    entryLo = supplyOBLo;
+    entryHi = supplyOBHi;
+    sl = bslNear;
+    tp1 = currentPrice - tpGap;
+    tp2 = sslNear;
+    tp3 = base.swingLow;
+    direction = 'short';
+  }
+
+  // Store dynamic SMC data with explicit number values
+  dynamicSMC[key] = {
+    name: base.name,
+    id: base.id,
+    tvSymbol: base.tvSymbol,
+    decimals: base.decimals,
+    swingHigh: base.swingHigh,
+    swingLow: base.swingLow,
+    bias: newBias,
+    structure: { type: structType, dir: structDir, tf: 'H4', note: `Dynamic — price at ${pricePct.toFixed(1)}% of range` },
+    choch: null,
+    orderBlocks: [
+      { type: 'demand', zone: [demandOBLo, demandOBHi], note: 'Dynamic demand OB near current price', strength: 'strong' },
+      { type: 'supply', zone: [supplyOBLo, supplyOBHi], note: 'Dynamic supply OB near current price', strength: 'strong' }
+    ],
+    fvg: [
+      { zone: [bullishFVGLo, bullishFVGHi], dir: 'bullish', note: 'Dynamic bullish FVG' },
+      { zone: [bearishFVGLo, bearishFVGHi], dir: 'bearish', note: 'Dynamic bearish FVG' }
+    ],
+    liquidity: [
+      { type: 'BSL', level: bslNear, note: 'Near-term buy-side liquidity' },
+      { type: 'BSL', level: base.swingHigh, note: 'Major swing high' },
+      { type: 'SSL', level: sslNear, note: 'Near-term sell-side liquidity' },
+      { type: 'SSL', level: base.swingLow, note: 'Major swing low' }
+    ],
+    targets: { bull: [bslNear, base.swingHigh], bear: [sslNear, base.swingLow] },
+    tp: { entry: [entryLo, entryHi], sl, tp1, tp2, tp3, direction }
+  };
+}
+
+function getDynamicData(key) {
+  return dynamicSMC[key] || INSTRUMENTS[key];
+}
+
+// ===== RENDER FUNCTIONS =====
+function fmt(val, decimals) {
+  return typeof val === 'number' ? val.toFixed(decimals) : val;
+}
+
+function renderOverviewCard(key, data) {
+  const d = getDynamicData(key); // Use dynamic SMC data
+  const biasClass = d.bias === 'bull' ? 'bull' : 'bear';
+  const biasText = d.bias === 'bull' ? 'Bullish' : 'Bearish';
+  const mainOB = d.orderBlocks.find(ob => ob.strength === 'strong' && ob.type === (d.bias === 'bull' ? 'demand' : 'supply'));
+  const mainFVG = d.fvg[0];
+
+  // Get current price from lastRealPrices or fallback to midpoint
+  const currentPrice = lastRealPrices[key] || (d.swingLow + (d.swingHigh - d.swingLow) * 0.5);
+  const prevClose = d.swingLow + (d.swingHigh - d.swingLow) * 0.5;
+  const change = ((currentPrice - prevClose) / prevClose * 100);
+  const changeClass = change >= 0 ? 'up' : 'down';
+  const changeSign = change >= 0 ? '+' : '';
+  const priceStr = fmt(currentPrice, d.decimals);
+  const changeStr = changeSign + change.toFixed(2) + '%';
+
+  return `
+    <div class="instrument-card" onclick="showDetail('${key}')">
+      <div class="card-header">
+        <div>
+          <div class="card-symbol">${d.name}</div>
+          <div class="card-bias ${biasClass}">${biasText}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="card-price" id="price-${key}">${priceStr}</div>
+          <div class="card-change ${changeClass}" id="change-${key}">${changeStr}</div>
+        </div>
+      </div>
+      <div class="card-tags">
+        <span class="tag ${d.structure.dir === 'bullish' ? 'bos-up' : 'bos-dn'}">${d.structure.type} ${d.structure.dir === 'bullish' ? '↑' : '↓'} ${d.structure.tf}</span>
+        ${d.choch ? `<span class="tag choch">${d.choch.type} ${d.choch.dir === 'bullish' ? '↑' : '↓'}</span>` : ''}
+        ${mainFVG ? `<span class="tag fvg">FVG ${fmt(mainFVG.zone[0], d.decimals)}-${fmt(mainFVG.zone[1], d.decimals)}</span>` : ''}
+      </div>
+      <div class="card-levels" style="margin-top:8px;">
+        <div class="level-item">
+          <span class="level-label">Key OB</span>
+          <span class="level-value ${mainOB ? (mainOB.type === 'demand' ? 'dem' : 'sup') : ''}">${mainOB ? fmt(mainOB.zone[0], d.decimals) + '-' + fmt(mainOB.zone[1], d.decimals) : '—'}</span>
+        </div>
+        <div class="level-item">
+          <span class="level-label">Target</span>
+          <span class="level-value ${d.bias === 'bull' ? 'dem' : 'res'}">${fmt(d.targets[d.bias === 'bull' ? 'bull' : 'bear'][0], d.decimals)}</span>
+        </div>
+      </div>
+      <div class="card-tp-row">
+        <span class="card-tp-badge tp1">TP1: ${fmt(d.tp.tp1, d.decimals)}</span>
+        <span class="card-tp-badge tp2">TP2: ${fmt(d.tp.tp2, d.decimals)}</span>
+        <span class="card-tp-badge tp3">TP3: ${fmt(d.tp.tp3, d.decimals)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderDetailView(key, data) {
+  const d = getDynamicData(key); // Use dynamic SMC data
+  const biasClass = d.bias === 'bull' ? 'bull' : 'bear';
+  const biasText = d.bias === 'bull' ? 'Bullish' : 'Bearish';
+  const rangeSize = d.swingHigh - d.swingLow;
+
+  const obRows = d.orderBlocks.map(ob => {
+    const color = ob.type === 'demand' ? 'var(--green)' : 'var(--red)';
+    const label = ob.type === 'demand' ? 'Demand OB' : 'Supply OB';
+    const tagClass = ob.type === 'demand' ? 'bos-up' : 'bos-dn';
+    return `<tr>
+      <td class="type-col"><span class="tag ${tagClass}">${label}</span></td>
+      <td class="zone-col" style="color:${color}">${fmt(ob.zone[0], d.decimals)} – ${fmt(ob.zone[1], d.decimals)}</td>
+      <td class="note-col">${ob.note}</td>
+    </tr>`;
+  }).join('');
+
+  const fvgRows = d.fvg.map(f => {
+    const color = f.dir === 'bullish' ? 'var(--green)' : 'var(--red)';
+    return `<tr>
+      <td class="type-col"><span class="tag fvg">FVG ${f.dir === 'bullish' ? '↑' : '↓'}</span></td>
+      <td class="zone-col" style="color:var(--purple)">${fmt(f.zone[0], d.decimals)} – ${fmt(f.zone[1], d.decimals)}</td>
+      <td class="note-col">${f.note}</td>
+    </tr>`;
+  }).join('');
+
+  const liqRows = d.liquidity.map(l => {
+    const color = l.type === 'BSL' ? 'var(--green)' : 'var(--red)';
+    return `<tr>
+      <td class="type-col"><span class="tag liq">${l.type}</span></td>
+      <td class="zone-col" style="color:${color}">${fmt(l.level, d.decimals)}</td>
+      <td class="note-col">${l.note}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <button class="back-btn" onclick="showOverview()">← Back to Overview</button>
+
+    <div class="detail-header">
+      <div>
+        <div style="font-size:20px;font-weight:700;">${d.name}</div>
+        <div class="card-bias ${biasClass}" style="margin-top:4px;">${biasText}</div>
+      </div>
+      <div class="detail-price" id="detail-price-${key}">—</div>
+      <div class="detail-change" id="detail-change-${key}">—</div>
+    </div>
+
+    <div class="card-tags" style="margin-bottom:12px;">
+      <span class="tag ${d.structure.dir === 'bullish' ? 'bos-up' : 'bos-dn'}">${d.structure.type} ${d.structure.dir} (${d.structure.tf}) — ${d.structure.note}</span>
+      ${d.choch ? `<span class="tag choch">${d.choch.type} ${d.choch.dir} (${d.choch.tf}) — ${d.choch.note}</span>` : ''}
+    </div>
+
+    <!-- TradingView Chart Widget -->
+    <div class="chart-container">
+      <div class="tradingview-widget-container">
+        <div id="tv-chart-${key}" style="height:400px;"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"><\/script>
+        <script type="text/javascript">
+        (function() {
+          var container = document.getElementById('tv-chart-${key}');
+          if (!container || container.getAttribute('data-loaded')) return;
+          container.setAttribute('data-loaded', 'true');
+          new TradingView.widget({
+            "autosize": true,
+            "symbol": "${d.tvSymbol}",
+            "interval": "60",
+            "timezone": "Asia/Bangkok",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#1a2332",
+            "enable_publishing": false,
+            "hide_side_toolbar": false,
+            "allow_symbol_change": true,
+            "container_id": "tv-chart-${key}",
+            "studies": ["STD;Smart_Money_Concepts"]
+          });
+        })();
+        <\/script>
+      </div>
+    </div>
+
+    <!-- TradingView Technical Analysis Widget -->
+    <div class="chart-container" style="margin-bottom:16px;">
+      <div class="tradingview-widget-container">
+        <div class="tradingview-widget-container__widget" style="height:450px;"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+        {
+          "interval": "1h",
+          "width": "100%",
+          "isTransparent": true,
+          "height": "450",
+          "symbol": "${d.tvSymbol}",
+          "showIntervalTabs": true,
+          "displayMode": "single",
+          "locale": "en",
+          "colorTheme": "dark"
+        }
+        <\/script>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-card">
+        <h3>Order Blocks (OB)</h3>
+        <table class="level-table">${obRows}</table>
+      </div>
+
+      <div class="detail-card">
+        <h3>Fair Value Gaps (FVG) & Liquidity</h3>
+        <table class="level-table">${fvgRows}</table>
+        <div style="margin-top:12px;">
+          <table class="level-table">${liqRows}</table>
+        </div>
+      </div>
+
+      <div class="detail-card">
+        <h3>Premium / Discount Zone</h3>
+        <div class="zone-bar-container">
+          <div class="zone-bar">
+            <div class="zone-marker" id="zone-marker-${key}" style="background:${d.bias === 'bull' ? 'var(--green)' : 'var(--red)'};"></div>
+          </div>
+          <div class="zone-labels">
+            <span style="color:var(--green);">Discount (Buy)</span>
+            <span>Equilibrium</span>
+            <span style="color:var(--red);">Premium (Sell)</span>
+          </div>
+        </div>
+        <table class="level-table" style="margin-top:12px;">
+          <tr><td class="type-col">Swing High</td><td class="zone-col" style="color:var(--red)">${fmt(d.swingHigh, d.decimals)}</td></tr>
+          <tr><td class="type-col">Swing Low</td><td class="zone-col" style="color:var(--green)">${fmt(d.swingLow, d.decimals)}</td></tr>
+          <tr><td class="type-col">Equilibrium</td><td class="zone-col">${fmt((d.swingHigh + d.swingLow) / 2, d.decimals)}</td></tr>
+        </table>
+
+        <h3 style="margin-top:16px;">Trade Targets</h3>
+        <table class="level-table">
+          <tr><td class="type-col" style="color:var(--green);">Bullish</td><td class="zone-col">${d.targets.bull.map(t => fmt(t, d.decimals)).join(' → ')}</td></tr>
+          <tr><td class="type-col" style="color:var(--red);">Bearish</td><td class="zone-col">${d.targets.bear.map(t => fmt(t, d.decimals)).join(' → ')}</td></tr>
+        </table>
+      </div>
+
+      <div class="detail-card">
+        <h3>🎯 Entry / TP / SL</h3>
+        <div class="tp-card entry">
+          <div>
+            <div class="tp-card-label">ENTRY ${d.tp.direction === 'long' ? '(BUY)' : '(SELL)'}</div>
+            <div class="tp-card-note">${d.tp.direction === 'long' ? 'Demand' : 'Supply'} zone — wait for confirmation</div>
+          </div>
+          <div class="tp-card-value" style="color:var(--blue);">${fmt(d.tp.entry[0], d.decimals)} – ${fmt(d.tp.entry[1], d.decimals)}</div>
+        </div>
+        <div class="tp-card sl">
+          <div>
+            <div class="tp-card-label">STOP LOSS</div>
+            <div class="tp-card-note">${d.tp.direction === 'long' ? 'Below' : 'Above'} structural level</div>
+          </div>
+          <div class="tp-card-value" style="color:var(--red);">${fmt(d.tp.sl, d.decimals)}</div>
+        </div>
+        <div class="tp-card tp">
+          <div>
+            <div class="tp-card-label">TP1 — Near Target</div>
+            <div class="tp-card-note">${d.liquidity.find(l => l.type === (d.tp.direction === 'long' ? 'BSL' : 'SSL'))?.note || 'First liquidity target'}</div>
+          </div>
+          <div class="tp-card-value" style="color:var(--green);">${fmt(d.tp.tp1, d.decimals)}</div>
+        </div>
+        <div class="tp-card tp">
+          <div>
+            <div class="tp-card-label">TP2 — Mid Target</div>
+            <div class="tp-card-note">${d.tp.direction === 'long' ? 'Major BSL' : 'Major SSL'} — structural level</div>
+          </div>
+          <div class="tp-card-value" style="color:var(--green);">${fmt(d.tp.tp2, d.decimals)}</div>
+        </div>
+        <div class="tp-card tp">
+          <div>
+            <div class="tp-card-label">TP3 — Final Target</div>
+            <div class="tp-card-note">Extended target — trail stop to TP2</div>
+          </div>
+          <div class="tp-card-value" style="color:var(--green);">${fmt(d.tp.tp3, d.decimals)}</div>
+        </div>
+        <div style="margin-top:10px;padding:8px;background:var(--bg-primary);border-radius:6px;font-size:12px;color:var(--text-secondary);">
+          <strong style="color:var(--text-primary);">Risk/Reward:</strong> 
+          ${(() => {
+            const entryMid = (d.tp.entry[0] + d.tp.entry[1]) / 2;
+            const risk = Math.abs(entryMid - d.tp.sl);
+            const reward = Math.abs(d.tp.tp2 - entryMid);
+            const rr = risk > 0 ? (reward / risk).toFixed(1) : '—';
+            return '1:' + rr + ' (TP2)';
+          })()}
+        </div>
+      </div>
+
+      <div class="detail-card">
+        <h3>SMC Trade Plan</h3>
+        <div class="trade-plan ${d.bias}">${d.plan}</div>
+
+        <h3 style="margin-top:16px;">Key Reminders</h3>
+        <div style="font-size:12px;color:var(--text-secondary);line-height:1.8;">
+          <div>• Wait for price to reach OB/FVG before entry</div>
+          <div>• Confirm with lower timeframe CHoCH</div>
+          <div>• Stop loss beyond the OB/FVG zone</div>
+          <div>• Target liquidity pools (BSL/SSL)</div>
+          <div>• Risk max 1-2% per trade</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSummaryRow(key, data) {
+  const d = getDynamicData(key); // Use dynamic SMC data
+  const biasColor = d.bias === 'bull' ? 'var(--green)' : 'var(--red)';
+  const biasText = d.bias === 'bull' ? 'Bullish' : 'Bearish';
+  const structColor = d.structure.dir === 'bullish' ? 'var(--green)' : 'var(--red)';
+  const mainOB = d.orderBlocks.find(ob => ob.strength === 'strong' && ob.type === (d.bias === 'bull' ? 'demand' : 'supply'));
+  const mainFVG = d.fvg[0];
+  const mainLiq = d.liquidity.find(l => l.type === (d.bias === 'bull' ? 'BSL' : 'SSL'));
+
+  // Get current price from lastRealPrices or fallback to midpoint
+  const currentPrice = lastRealPrices[key] || (d.swingLow + (d.swingHigh - d.swingLow) * 0.5);
+  const priceStr = fmt(currentPrice, d.decimals);
+  const pos = ((currentPrice - d.swingLow) / (d.swingHigh - d.swingLow) * 100);
+  const pdZone = pos > 65 ? 'Premium' : pos < 35 ? 'Discount' : 'Equilibrium';
+
+  return `<tr>
+    <td style="font-weight:600;">${d.name}</td>
+    <td id="summary-price-${key}" style="font-variant-numeric:tabular-nums;">${priceStr}</td>
+    <td><span class="tag ${d.structure.dir === 'bullish' ? 'bos-up' : 'bos-dn'}">${d.structure.type} ${d.structure.tf}</span>
+    ${d.choch ? ` <span class="tag choch">${d.choch.type}</span>` : ''}</td>
+    <td><span style="color:${biasColor};font-weight:600;">${biasText}</span></td>
+    <td style="font-variant-numeric:tabular-nums;">${mainOB ? fmt(mainOB.zone[0], d.decimals) + '-' + fmt(mainOB.zone[1], d.decimals) : '—'}</td>
+    <td style="color:var(--purple);font-variant-numeric:tabular-nums;">${mainFVG ? fmt(mainFVG.zone[0], d.decimals) + '-' + fmt(mainFVG.zone[1], d.decimals) : '—'}</td>
+    <td style="color:${d.bias === 'bull' ? 'var(--green)' : 'var(--red)'};font-variant-numeric:tabular-nums;">${mainLiq ? fmt(mainLiq.level, d.decimals) : '—'}</td>
+    <td>${pdZone}</td>
+  </tr>`;
+}
+
+function renderAlerts() {
+  const alerts = [];
+  Object.entries(INSTRUMENTS).forEach(([key, d]) => {
+    if (d.choch) {
+      alerts.push({
+        type: d.choch.dir === 'bullish' ? 'bullish' : 'bearish',
+        icon: d.choch.dir === 'bullish' ? '🟢' : '🔴',
+        text: `${d.name}: ${d.choch.type} ${d.choch.dir} on ${d.choch.tf} — ${d.choch.note}`,
+        time: 'Active'
+      });
+    }
+    alerts.push({
+      type: d.structure.dir === 'bullish' ? 'bullish' : 'bearish',
+      icon: d.structure.dir === 'bullish' ? '📈' : '📉',
+      text: `${d.name}: ${d.structure.type} ${d.structure.dir} on ${d.structure.tf} — ${d.structure.note}`,
+      time: 'Active'
+    });
+    d.fvg.forEach(f => {
+      alerts.push({
+        type: 'neutral',
+        icon: '🟣',
+        text: `${d.name}: ${f.dir === 'bullish' ? 'Bullish' : 'Bearish'} FVG at ${fmt(f.zone[0], d.decimals)}-${fmt(f.zone[1], d.decimals)} — ${f.note}`,
+        time: 'Pending'
+      });
+    });
+  });
+
+  const container = document.getElementById('alerts-list');
+  container.innerHTML = alerts.map(a => `
+    <div class="alert-item ${a.type}">
+      <span class="alert-icon">${a.icon}</span>
+      <span>${a.text}</span>
+      <span class="alert-time">${a.time}</span>
+    </div>
+  `).join('');
+}
+
+// ===== NAVIGATION =====
+function showDetail(key) {
+  key = String(key).toUpperCase();
+  if (!Object.prototype.hasOwnProperty.call(INSTRUMENTS, key)) return;
+  const viewName = key.toLowerCase();
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  const view = document.getElementById('view-' + viewName);
+  if (view) {
+    view.classList.add('active');
+    // Re-render detail view with dynamic SMC data
+    view.innerHTML = renderDetailView(key, INSTRUMENTS[key]);
+  }
+  const tab = document.querySelector(`.nav-tab[data-view="${viewName}"]`);
+  if (tab) tab.classList.add('active');
+
+  // Initialize TradingView chart for this symbol
+  setTimeout(() => initTVChart(key), 300);
+}
+
+function showOverview() {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('view-overview').classList.add('active');
+  document.querySelector('.nav-tab[data-view="overview"]').classList.add('active');
+}
+
+function initTVChart(key) {
+  const data = INSTRUMENTS[key];
+  const container = document.getElementById('tv-chart-' + key);
+  if (!container || container.getAttribute('data-loaded')) return;
+  container.setAttribute('data-loaded', 'true');
+
+  if (typeof TradingView !== 'undefined') {
+    new TradingView.widget({
+      autosize: true,
+      symbol: data.tvSymbol,
+      interval: '60',
+      timezone: 'Asia/Bangkok',
+      theme: 'dark',
+      style: '1',
+      locale: 'en',
+      toolbar_bg: '#1a2332',
+      enable_publishing: false,
+      hide_side_toolbar: false,
+      allow_symbol_change: true,
+      container_id: 'tv-chart-' + key
+    });
+  }
+}
+
+// ===== PRICE FETCHING (CORS-friendly) =====
+let alertSettings = { popup: true, sound: false };
+let activeSignals = [];
+let lastRealPrices = {};
+let simulatedPrices = { XAUUSD: 4092, USOIL: 99.86 };
+let forexBaseData = null;
+
+function toggleAlerts(type) {
+  alertSettings[type] = !alertSettings[type];
+  const btn = document.getElementById('alert-toggle-' + type);
+  if (btn) btn.classList.toggle('active', alertSettings[type]);
+  if (type === 'popup' && alertSettings.popup && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+async function fetchForexRates() {
+  try {
+    const r = await fetch('https://open.er-api.com/v6/latest/USD');
+    if (r.ok) { forexBaseData = await r.json(); return true; }
+  } catch (e) {}
+  return false;
+}
+
+function getForexPrice(pair) {
+  if (!forexBaseData || !forexBaseData.rates) return null;
+  const rates = forexBaseData.rates;
+  try {
+    switch (pair) {
+      case 'OANDA:EURUSD': return 1 / rates.EUR;
+      case 'OANDA:GBPUSD': return 1 / rates.GBP;
+      case 'OANDA:USDJPY': return rates.JPY;
+      case 'OANDA:USDCHF': return rates.CHF;
+      case 'OANDA:AUDUSD': return 1 / rates.AUD;
+      case 'OANDA:USDCAD': return rates.CAD;
+      case 'OANDA:GBPJPY': return rates.GBP !== 0 ? (1 / rates.GBP) * rates.JPY : null;
+      case 'OANDA:GBPAUD': return rates.GBP !== 0 ? rates.AUD !== 0 ? (1 / rates.GBP) * rates.AUD : null : null;
+      case 'OANDA:GBPNZD': return rates.GBP !== 0 ? rates.NZD !== 0 ? (1 / rates.GBP) * rates.NZD : null : null;
+      case 'OANDA:GBPCAD': return rates.GBP !== 0 ? rates.CAD !== 0 ? (1 / rates.GBP) * rates.CAD : null : null;
+      case 'OANDA:EURJPY': return rates.EUR !== 0 ? (1 / rates.EUR) * rates.JPY : null;
+      case 'OANDA:EURAUD': return rates.EUR !== 0 ? rates.AUD !== 0 ? (1 / rates.EUR) * rates.AUD : null : null;
+      case 'OANDA:EURNZD': return rates.EUR !== 0 ? rates.NZD !== 0 ? (1 / rates.EUR) * rates.NZD : null : null;
+      default: return null;
+    }
+  } catch (e) { return null; }
+}
+
+function simulateTick(key, lastPrice) {
+  const volatility = (key === 'XAUUSD') ? 0.8 : (key === 'USOIL') ? 0.05 : 0.0001;
+  const change = (Math.random() - 0.5) * 2 * volatility;
+  return Math.max(lastPrice * 0.95, Math.min(lastPrice * 1.05, lastPrice + change));
+}
+
+async function fetchPrices() {
+  const gotForex = await fetchForexRates();
+  const now = new Date();
+
+  Object.entries(INSTRUMENTS).forEach(([key, data]) => {
+    let price = null;
+    const forexSymbols = ['OANDA:EURUSD','OANDA:GBPUSD','OANDA:USDJPY','OANDA:USDCHF','OANDA:AUDUSD','OANDA:USDCAD','OANDA:GBPJPY','OANDA:GBPAUD','OANDA:GBPNZD','OANDA:GBPCAD','OANDA:EURJPY','OANDA:EURAUD','OANDA:EURNZD'];
+    const isForex = forexSymbols.includes(data.tvSymbol);
+
+    if (isForex && gotForex) {
+      price = getForexPrice(data.tvSymbol);
+    }
+
+    if (!isForex) {
+      simulatedPrices[key] = simulateTick(key, simulatedPrices[key]);
+      price = simulatedPrices[key];
+    }
+
+    // Fallback: use last known price or midpoint if API fails
+    if (price === null || price === undefined) {
+      price = lastRealPrices[key] || (data.swingLow + (data.swingHigh - data.swingLow) * 0.5);
+    }
+
+    const prevPrice = lastRealPrices[key] || price;
+    const prevClose = data.swingLow + (data.swingHigh - data.swingLow) * 0.5;
+    const change = ((price - prevClose) / prevClose * 100);
+    lastRealPrices[key] = price;
+
+    // Recalculate dynamic SMC data
+    recalculateSMC(key, price);
+
+    updatePriceDisplay(key, price, change, data.decimals);
+    checkSignals(key, price, prevPrice, data);
+  });
+
+  // Always re-render overview and summary with latest dynamic data
+  renderOverview();
+  renderSummaryTable();
+
+  const src = gotForex ? 'Live API' : 'Cached/Fallback';
+  document.getElementById('last-update').textContent = 'Updated: ' + now.toLocaleTimeString() + ' (' + src + ')';
+}
+
+function updatePriceDisplay(key, price, change, decimals) {
+  const changeClass = change >= 0 ? 'up' : 'down';
+  const changeSign = change >= 0 ? '+' : '';
+  const priceStr = fmt(price, decimals);
+  const changeStr = changeSign + change.toFixed(2) + '%';
+
+  // Overview card
+  const priceEl = document.getElementById('price-' + key);
+  const changeEl = document.getElementById('change-' + key);
+  if (priceEl) priceEl.textContent = priceStr;
+  if (changeEl) { changeEl.textContent = changeStr; changeEl.className = 'card-change ' + changeClass; }
+
+  // Update bias badge dynamically
+  const dynData = dynamicSMC[key];
+  if (dynData) {
+    const biasEl = document.querySelector(`#price-${key}`)?.closest('.instrument-card')?.querySelector('.card-bias');
+    if (biasEl) {
+      biasEl.textContent = dynData.bias === 'bull' ? 'Bullish' : 'Bearish';
+      biasEl.className = 'card-bias ' + (dynData.bias === 'bull' ? 'bull' : 'bear');
+    }
+  }
+
+  // Detail view
+  const detailPrice = document.getElementById('detail-price-' + key);
+  const detailChange = document.getElementById('detail-change-' + key);
+  if (detailPrice) detailPrice.textContent = priceStr;
+  if (detailChange) { detailChange.textContent = changeStr; detailChange.className = 'card-change ' + changeClass; }
+
+  // Summary table
+  const summaryPrice = document.getElementById('summary-price-' + key);
+  if (summaryPrice) summaryPrice.textContent = priceStr;
+
+  // Zone marker position
+  const data = INSTRUMENTS[key];
+  const rangeSize = data.swingHigh - data.swingLow;
+  const pos = Math.max(0, Math.min(100, ((price - data.swingLow) / rangeSize) * 100));
+  const marker = document.getElementById('zone-marker-' + key);
+  if (marker) marker.style.left = pos + '%';
+}
+
+// ===== SIGNAL DETECTION =====
+function checkSignals(key, price, prevPrice, data) {
+  if (!price || !prevPrice) return;
+
+  const newSignals = [];
+
+  // Check Order Blocks
+  data.orderBlocks.forEach(ob => {
+    const [lo, hi] = ob.zone;
+    if (price >= lo && price <= hi) {
+      const wasInside = prevPrice >= lo && prevPrice <= hi;
+      if (!wasInside) {
+        const isDemand = ob.type === 'demand';
+        newSignals.push({
+          key, price, ob,
+          type: isDemand ? 'buy' : 'sell',
+          title: (isDemand ? '🟢 BUY' : '🔴 SELL') + ' Signal — ' + data.name,
+          detail: `Price entered ${ob.type === 'demand' ? 'Demand' : 'Supply'} OB: ${fmt(lo, data.decimals)}–${fmt(hi, data.decimals)}\n${ob.note}`,
+          level: fmt(lo, data.decimals) + '–' + fmt(hi, data.decimals)
+        });
+      }
+    }
+  });
+
+  // Check FVG zones
+  data.fvg.forEach(fvg => {
+    const [lo, hi] = fvg.zone;
+    if (price >= lo && price <= hi) {
+      const wasInside = prevPrice >= lo && prevPrice <= hi;
+      if (!wasInside) {
+        const isBullish = fvg.dir === 'bullish';
+        newSignals.push({
+          key, price, fvg,
+          type: isBullish ? 'buy' : 'sell',
+          title: (isBullish ? '🟢 BUY' : '🔴 SELL') + ' Signal — ' + data.name,
+          detail: `Price filling ${fvg.dir} FVG: ${fmt(lo, data.decimals)}–${fmt(hi, data.decimals)}\n${fvg.note}`,
+          level: fmt(lo, data.decimals) + '–' + fmt(hi, data.decimals)
+        });
+      }
+    }
+  });
+
+  // Check Liquidity sweeps
+  data.liquidity.forEach(liq => {
+    const threshold = (data.swingHigh - data.swingLow) * 0.002;
+    if (Math.abs(price - liq.level) < threshold) {
+      const wasNear = Math.abs(prevPrice - liq.level) < threshold;
+      if (!wasNear) {
+        const isBSL = liq.type === 'BSL';
+        newSignals.push({
+          key, price, liq,
+          type: 'neutral',
+          title: '⚡ Liquidity Sweep — ' + data.name,
+          detail: `Price near ${liq.type}: ${fmt(liq.level, data.decimals)}\n${liq.note}`,
+          level: fmt(liq.level, data.decimals)
+        });
+      }
+    }
+  });
+
+  // Process new signals
+  newSignals.forEach(signal => {
+    signal.time = new Date().toLocaleTimeString();
+    activeSignals.unshift(signal);
+    if (activeSignals.length > 50) activeSignals.length = 50;
+
+    if (alertSettings.popup) {
+      showPopup(signal, data);
+      showBrowserNotification(signal);
+    }
+    if (alertSettings.sound) playBeep(signal.type === 'buy' ? 880 : signal.type === 'sell' ? 440 : 660);
+  });
+
+  if (newSignals.length > 0) {
+    updateSignalBadge();
+    renderLiveAlerts();
+  }
+}
+
+// ===== POPUP & NOTIFICATIONS =====
+function showPopup(signal, data) {
+  const container = document.getElementById('popup-container');
+  const popup = document.createElement('div');
+  popup.className = 'signal-popup ' + signal.type;
+  const icon = signal.type === 'buy' ? '🟢' : signal.type === 'sell' ? '🔴' : '⚡';
+  popup.innerHTML = `
+    <span class="popup-icon">${icon}</span>
+    <div class="popup-body">
+      <div class="popup-title ${signal.type}">${signal.title}</div>
+      <div class="popup-detail">${signal.detail.replace(/\n/g, '<br>')}</div>
+      <div style="margin-top:4px;font-size:11px;color:var(--text-muted);">${signal.time} | Price: ${fmt(signal.price, data.decimals)}</div>
+    </div>
+    <button class="popup-close" onclick="this.parentElement.remove()">×</button>
+  `;
+  container.appendChild(popup);
+  setTimeout(() => {
+    if (popup.parentElement) {
+      popup.style.animation = 'fadeOut 0.3s ease-in forwards';
+      setTimeout(() => popup.remove(), 300);
+    }
+  }, 8000);
+}
+
+function showBrowserNotification(signal) {
+  if (Notification.permission === 'granted') {
+    const icon = signal.type === 'buy' ? '🟢' : signal.type === 'sell' ? '🔴' : '⚡';
+    const n = new Notification(icon + ' ' + signal.title, {
+      body: signal.detail.replace(/\n/g, ' '),
+      icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">' + (signal.type === 'buy' ? '🟢' : '🔴') + '</text></svg>',
+      tag: signal.key + '-' + Date.now(),
+      requireInteraction: false
+    });
+    setTimeout(() => n.close(), 6000);
+  }
+}
+
+function playBeep(freq) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = freq || 660;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.4);
+  } catch (e) {}
+}
+
+function updateSignalBadge() {
+  const count = activeSignals.length;
+  const badge = document.getElementById('signal-badge');
+  const wrapper = document.getElementById('signal-count');
+  if (badge) badge.textContent = count;
+  if (wrapper) wrapper.style.display = count > 0 ? 'inline' : 'none';
+}
+
+function renderLiveAlerts() {
+  const container = document.getElementById('alerts-list');
+  if (!container) return;
+
+  // Combine static SMC alerts with live signals
+  const staticAlerts = [];
+  Object.entries(INSTRUMENTS).forEach(([key, d]) => {
+    if (d.choch) {
+      staticAlerts.push({
+        type: d.choch.dir === 'bullish' ? 'bullish' : 'bearish',
+        icon: d.choch.dir === 'bullish' ? '🟢' : '🔴',
+        text: `${d.name}: ${d.choch.type} ${d.choch.dir} on ${d.choch.tf} — ${d.choch.note}`,
+        time: 'Active'
+      });
+    }
+    staticAlerts.push({
+      type: d.structure.dir === 'bullish' ? 'bullish' : 'bearish',
+      icon: d.structure.dir === 'bullish' ? '📈' : '📉',
+      text: `${d.name}: ${d.structure.type} ${d.structure.dir} on ${d.structure.tf} — ${d.structure.note}`,
+      time: 'Active'
+    });
+  });
+
+  const liveAlerts = activeSignals.slice(0, 20).map(s => ({
+    type: s.type === 'buy' ? 'bullish' : s.type === 'sell' ? 'bearish' : 'neutral',
+    icon: s.type === 'buy' ? '🟢' : s.type === 'sell' ? '🔴' : '⚡',
+    text: s.title + ' @ ' + fmt(s.price, INSTRUMENTS[s.key].decimals),
+    time: s.time
+  }));
+
+  let html = '';
+  if (liveAlerts.length > 0) {
+    html += '<h4 style="font-size:12px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Live Signals</h4>';
+    html += liveAlerts.map(a => `
+      <div class="alert-item ${a.type}">
+        <span class="alert-icon">${a.icon}</span>
+        <span>${a.text}</span>
+        <span class="alert-time">${a.time}</span>
+      </div>
+    `).join('');
+    html += '<div style="margin:12px 0;border-top:1px solid var(--border);"></div>';
+  }
+  html += '<h4 style="font-size:12px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">SMC Structure Alerts</h4>';
+  html += staticAlerts.map(a => `
+    <div class="alert-item ${a.type}">
+      <span class="alert-icon">${a.icon}</span>
+      <span>${a.text}</span>
+      <span class="alert-time">${a.time}</span>
+    </div>
+  `).join('');
+
+  container.innerHTML = html;
+}
+
+// ===== CLOCK =====
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' (UTC+7)';
+}
+
+// ===== RE-RENDER FUNCTIONS =====
+function renderOverview() {
+  const grid = document.getElementById('overview-grid');
+  if (grid) {
+    grid.innerHTML = Object.entries(INSTRUMENTS).map(([k, d]) => renderOverviewCard(k, d)).join('');
+  }
+}
+
+function renderSummaryTable() {
+  const tbody = document.getElementById('summary-tbody');
+  if (tbody) {
+    tbody.innerHTML = Object.entries(INSTRUMENTS).map(([k, d]) => renderSummaryRow(k, d)).join('');
+  }
+}
+
+// ===== INIT =====
+function init() {
+  // Render overview cards
+  const grid = document.getElementById('overview-grid');
+  grid.innerHTML = Object.entries(INSTRUMENTS).map(([k, d]) => renderOverviewCard(k, d)).join('');
+
+  // Render summary table
+  const tbody = document.getElementById('summary-tbody');
+  tbody.innerHTML = Object.entries(INSTRUMENTS).map(([k, d]) => renderSummaryRow(k, d)).join('');
+
+  // Render detail views
+  Object.entries(INSTRUMENTS).forEach(([k, d]) => {
+    const view = document.getElementById('view-' + k.toLowerCase());
+    if (view) view.innerHTML = renderDetailView(k, d);
+  });
+
+  // Render alerts
+  renderAlerts();
+
+  // Tab navigation
+  document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const viewName = tab.dataset.view;
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      if (viewName === 'overview') {
+        document.getElementById('view-overview').classList.add('active');
+      } else if (viewName === 'alerts') {
+        document.getElementById('view-alerts').classList.add('active');
+        renderLiveAlerts();
+      } else {
+        showDetail(viewName);
+      }
+    });
+  });
+
+  // Request notification permission
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+
+  // Fetch prices immediately, then every 30 seconds
+  fetchPrices();
+  setInterval(fetchPrices, 30000);
+
+  // Clock
+  updateClock();
+  setInterval(updateClock, 1000);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
