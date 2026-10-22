@@ -1,0 +1,12 @@
+{
+  "name": "smc-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SMC dashboard web service",
+  "engines": { "node": ">=22 <25" },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  }
+}
