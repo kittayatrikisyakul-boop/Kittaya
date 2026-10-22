@@ -156,6 +156,7 @@ body {
 .tag.choch { background: var(--purple-bg); color: var(--purple); }
 .tag.ob { background: var(--blue-bg); color: var(--blue); }
 .tag.fvg { background: var(--purple-bg); color: var(--purple); }
+.tag.neutral { background: var(--yellow-bg); color: var(--yellow); }
 .tag.liq { background: var(--yellow-bg); color: var(--yellow); }
 
 /* Detail View */
@@ -362,6 +363,22 @@ body {
 .card-tp-badge.tp1 { background: var(--green-bg); color: var(--green); }
 .card-tp-badge.tp2 { background: var(--yellow-bg); color: var(--yellow); }
 .card-tp-badge.tp3 { background: var(--orange-bg, rgba(249,115,22,0.1)); color: var(--orange); }
+
+/* Price position and reference-zone proximity */
+.card-range { margin-top: 14px; }
+.card-range-track { height: 8px; border-radius: 5px; background: var(--border); position: relative; }
+.card-range-fill { height: 100%; border-radius: inherit; background: var(--range-color, var(--blue)); opacity: .65; }
+.card-range-marker { position: absolute; top: -5px; width: 18px; height: 18px; border-radius: 50%; background: var(--range-color, var(--blue)); border: 2px solid var(--bg-card); transform: translateX(-50%); }
+.card-range-labels { display: flex; justify-content: space-between; gap: 6px; margin-top: 6px; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.card-range-percent { color: var(--range-color, var(--text-secondary)); text-align: center; }
+.card-proximity { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+.zone-distance { display: inline-flex; gap: 5px; align-items: center; }
+.zone-distance::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.zone-distance[data-state="inside"]::before { background: var(--red); }
+.zone-distance[data-state="near"]::before, .zone-distance[data-state="watch"]::before { background: var(--yellow); }
+.zone-distance[data-state="far"]::before { background: var(--green); }
+.card-reference-note { font-size: 10px; color: var(--text-muted); margin-top: 6px; }
+
 </style>
 </head>
 <body>
@@ -959,12 +976,61 @@ function fmt(val, decimals) {
   return typeof val === 'number' ? val.toFixed(decimals) : val;
 }
 
+// Distances use the closest edge of the same reference zone shown on the card.
+function referenceZoneDistance(price, zone) {
+  if (!Number.isFinite(price) || !zone || !Array.isArray(zone.zone) || zone.zone.length !== 2) return null;
+  const [low, high] = zone.zone;
+  if (!Number.isFinite(low) || !Number.isFinite(high) || high < low) return null;
+  return Math.max(low - price, price - high, 0);
+}
+
+function nearestReferenceZone(zones, price) {
+  return (zones || []).filter(zone => referenceZoneDistance(Number.isFinite(price) ? price : 0, zone) !== null)
+    .reduce((best, zone) => !best || (Number.isFinite(price) && referenceZoneDistance(price, zone) < referenceZoneDistance(price, best)) ? zone : best, null);
+}
+
+function referenceProximity(price, zone, range) {
+  if (!Number.isFinite(price) || !Number.isFinite(range) || range <= 0) return {state: 'unavailable', label: 'รอข้อมูล'};
+  const distance = referenceZoneDistance(price, zone);
+  if (distance === null) return {state: 'missing', label: 'ไม่มีโซน'};
+  if (distance === 0) return {state: 'inside', label: 'อยู่ใน'};
+  if (distance <= range * .02) return {state: 'near', label: 'ใกล้'};
+  if (distance <= range * .05) return {state: 'watch', label: 'เฝ้าดู'};
+  return {state: 'far', label: 'ไกล'};
+}
+
+function renderCardContext(key, d, ob, fvg) {
+  const q = quoteState[key];
+  const range = d.swingHigh - d.swingLow;
+  const valid = quoteUsable(q) && Number.isFinite(range) && range > 0;
+  const price = valid ? q.price : null;
+  const position = valid ? (price - d.swingLow) / range * 100 : null;
+  const clamped = valid ? Math.max(0, Math.min(100, position)) : 0;
+  const color = d.bias === 'bull' ? 'var(--green)' : d.bias === 'bear' ? 'var(--red)' : 'var(--blue)';
+  const positionLabel = valid ? Math.round(position) + '%' + (position < 0 ? ' · ต่ำกว่า Swing Low' : position > 100 ? ' · สูงกว่า Swing High' : '') : 'รอข้อมูลราคา';
+  const badges = [['OB', ob], ['FVG', fvg]].map(([name, zone]) => {
+    const status = referenceProximity(price, zone, range);
+    const distance = referenceZoneDistance(price, zone);
+    const detail = distance === null || !valid ? 'ต้องมีราคาที่ใช้งานได้และโซนอ้างอิง' : `ระยะถึงโซน ${fmt(distance, d.decimals)} (${(distance / range * 100).toFixed(1)}% ของช่วง Swing)`;
+    return `<span class="zone-distance" data-state="${status.state}" title="${detail}">${status.label} ${name}</span>`;
+  }).join('');
+  return `<div class="card-range" style="--range-color:${color}">
+    <div class="card-range-track" ${valid ? `role="meter" aria-label="ตำแหน่งราคาในช่วง Swing อ้างอิง" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${clamped}" aria-valuetext="${positionLabel}"` : 'aria-label="รอข้อมูลราคา"'}>
+      ${valid ? `<div class="card-range-fill" style="width:${clamped}%"></div><span class="card-range-marker" style="left:${clamped}%"></span>` : ''}
+    </div>
+    <div class="card-range-labels"><span>${fmt(d.swingLow, d.decimals)}</span><span class="card-range-percent">${positionLabel}</span><span>${fmt(d.swingHigh, d.decimals)}</span></div>
+    <div class="card-proximity">${badges}</div>
+    <div class="card-reference-note">โซนอ้างอิง · ใกล้ ≤2% / เฝ้าดู ≤5% ของช่วง Swing · ไม่ใช่สัญญาณเข้าเทรด</div>
+  </div>`;
+}
+
 function renderOverviewCard(key, data) {
   const d = getDynamicData(key); // Use dynamic SMC data
   const biasClass = d.bias;
   const biasText = biasLabel(d);
-  const mainOB = d.orderBlocks.find(ob => ob.strength === 'strong' && ob.type === (d.bias === 'bull' ? 'demand' : 'supply'));
-  const mainFVG = d.fvg[0];
+  const contextPrice = quoteUsable(quoteState[key]) ? quoteState[key].price : null;
+  const mainOB = nearestReferenceZone(d.orderBlocks, contextPrice);
+  const mainFVG = nearestReferenceZone(d.fvg, contextPrice);
 
   // Get current price from lastRealPrices or fallback to midpoint
   const currentPrice = lastRealPrices[key] || (d.swingLow + (d.swingHigh - d.swingLow) * 0.5);
@@ -988,13 +1054,13 @@ function renderOverviewCard(key, data) {
         </div>
       </div>
       <div class="card-tags">
-        <span class="tag ${d.structure.dir === 'bullish' ? 'bos-up' : 'bos-dn'}">${d.structure.type} ${d.structure.dir === 'bullish' ? '↑' : '↓'} ${d.structure.tf}</span>
+        <span class="tag ${d.structure.dir === 'bullish' ? 'bos-up' : d.structure.dir === 'bearish' ? 'bos-dn' : 'neutral'}">${d.structure.type} ${d.structure.dir === 'bullish' ? '↑' : d.structure.dir === 'bearish' ? '↓' : '—'} ${d.structure.tf}</span>
         ${d.choch ? `<span class="tag choch">${d.choch.type} ${d.choch.dir === 'bullish' ? '↑' : '↓'}</span>` : ''}
         ${mainFVG ? `<span class="tag fvg">FVG ${fmt(mainFVG.zone[0], d.decimals)}-${fmt(mainFVG.zone[1], d.decimals)}</span>` : ''}
       </div>
       <div class="card-levels" style="margin-top:8px;">
         <div class="level-item">
-          <span class="level-label">Reference OB</span>
+          <span class="level-label">Nearest reference OB</span>
           <span class="level-value ${mainOB ? (mainOB.type === 'demand' ? 'dem' : 'sup') : ''}">${mainOB ? fmt(mainOB.zone[0], d.decimals) + '-' + fmt(mainOB.zone[1], d.decimals) : '—'}</span>
         </div>
         <div class="level-item">
@@ -1007,6 +1073,7 @@ function renderOverviewCard(key, data) {
         <span class="card-tp-badge tp2">Ref TP2: ${fmt(d.tp.tp2, d.decimals)}</span>
         <span class="card-tp-badge tp3">Ref TP3: ${fmt(d.tp.tp3, d.decimals)}</span>
       </div>
+      ${renderCardContext(key, d, mainOB, mainFVG)}
     </div>
   `;
 }
@@ -1059,7 +1126,7 @@ function renderDetailView(key, data) {
     </div>
 
     <div class="card-tags" style="margin-bottom:12px;">
-      <span class="tag ${d.structure.dir === 'bullish' ? 'bos-up' : 'bos-dn'}">${d.structure.type} ${d.structure.dir} (${d.structure.tf}) — ${d.structure.note}</span>
+      <span class="tag ${d.structure.dir === 'bullish' ? 'bos-up' : d.structure.dir === 'bearish' ? 'bos-dn' : 'neutral'}">${d.structure.type} ${d.structure.dir} (${d.structure.tf}) — ${d.structure.note}</span>
       ${d.choch ? `<span class="tag choch">${d.choch.type} ${d.choch.dir} (${d.choch.tf}) — ${d.choch.note}</span>` : ''}
     </div>
 
@@ -1223,8 +1290,9 @@ function renderSummaryRow(key, data) {
   const biasColor = d.bias === 'bull' ? 'var(--green)' : d.bias === 'bear' ? 'var(--red)' : 'var(--yellow)';
   const biasText = biasLabel(d);
   const structColor = d.structure.dir === 'bullish' ? 'var(--green)' : 'var(--red)';
-  const mainOB = d.orderBlocks.find(ob => ob.strength === 'strong' && ob.type === (d.bias === 'bull' ? 'demand' : 'supply'));
-  const mainFVG = d.fvg[0];
+  const contextPrice = quoteUsable(quoteState[key]) ? quoteState[key].price : null;
+  const mainOB = nearestReferenceZone(d.orderBlocks, contextPrice);
+  const mainFVG = nearestReferenceZone(d.fvg, contextPrice);
   const mainLiq = d.liquidity.find(l => l.type === (d.bias === 'bull' ? 'BSL' : 'SSL'));
 
   // Get current price from lastRealPrices or fallback to midpoint
@@ -1236,7 +1304,7 @@ function renderSummaryRow(key, data) {
   return `<tr>
     <td style="font-weight:600;">${d.name}</td>
     <td id="summary-price-${key}" style="font-variant-numeric:tabular-nums;">${priceStr}</td>
-    <td><span class="tag ${d.structure.dir === 'bullish' ? 'bos-up' : 'bos-dn'}">${d.structure.type} ${d.structure.tf}</span>
+    <td><span class="tag ${d.structure.dir === 'bullish' ? 'bos-up' : d.structure.dir === 'bearish' ? 'bos-dn' : 'neutral'}">${d.structure.type} ${d.structure.tf}</span>
     ${d.choch ? ` <span class="tag choch">${d.choch.type}</span>` : ''}</td>
     <td><span style="color:${biasColor};font-weight:600;">${biasText}</span></td>
     <td style="font-variant-numeric:tabular-nums;">${mainOB ? fmt(mainOB.zone[0], d.decimals) + '-' + fmt(mainOB.zone[1], d.decimals) : '—'}</td>
