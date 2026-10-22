@@ -2,7 +2,7 @@
 
 ## Current capabilities
 
-The web server serves the existing dashboard. Forex card data remains a daily reference feed; gold/oil card prices have no connected feed. TradingView charts are independent of dashboard quotes. Broker authentication, streaming market data, and real-time SMC computation are **not implemented yet**. `/api/status` reports this explicitly. `/healthz` validates only the web server, not a market-data connection.
+The web server serves the existing dashboard. Cards default to a one-time snapshot read from public TradingView/OANDA symbol pages. Each record preserves its source URL and page retrieval time; the actual quote timestamp is unknown. This is not a live feed and never generates streaming alerts. Fourteen symbols are included; oil is unavailable. The source selector can switch to daily reference Forex rates, which do not include gold/oil. The selected mode is retained in browser local storage. Neither mode is a live broker connection. TradingView charts are independent of dashboard quotes. Broker authentication, streaming market data, and real-time SMC computation are **not implemented yet**. `/api/status` reports this explicitly. `/healthz` validates only the web server, not a market-data connection.
 
 ## Deploy this web server on Render
 
@@ -36,3 +36,7 @@ npm start
 A cTrader account (demo is suitable for development), an Open API application approved as required by cTrader, and a hosted OAuth callback are prerequisites. All broker credentials and tokens must remain server-side. Never add client secrets or access/refresh tokens to this public repository, browser scripts, or chat. Configure them through the hosting service's Environment settings when broker support is implemented.
 
 Before declaring real-time readiness, validate authorized account access, symbol availability for XAUUSD/GBPJPY/GBPNZD/GBPAUD/USDJPY, historical candles, live quotes, reconnect/catch-up, and stale-data suppression. A successful web deployment does not validate these capabilities.
+
+## TradingView snapshot
+
+The snapshot is bundled in `index.html` as `TRADINGVIEW_SNAPSHOT`. It is a one-time observation, not an automated scraping service or a TradingView data API. It does not refresh itself. Retrieval time must never be described as the quote/tick timestamp. Values do not establish candle structure, so existing manually supplied OB/FVG/TP/SL levels have not been recalculated. Snapshot and daily-reference data are kept separate; switching clears prior quote baselines and events.

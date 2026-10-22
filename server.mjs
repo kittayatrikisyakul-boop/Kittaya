@@ -34,7 +34,7 @@ export function createServer() {
       body = JSON.stringify({
         realtimeConnected: false,
         stage: 'web-server-only',
-        message: 'Broker integration is not installed. The dashboard uses daily reference rates, not a live broker feed.',
+        message: 'Broker integration is not installed. The dashboard offers a one-time TradingView/OANDA public-page snapshot or daily reference rates, not a live broker feed.',
       });
       contentType = 'application/json; charset=utf-8';
     } else if (path === '/' || path === '/index.html') {

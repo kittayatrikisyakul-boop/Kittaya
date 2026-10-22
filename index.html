@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SMC Dashboard | Smart Money Concepts</title>
-<meta name="description" content="Daily Forex reference rates with manually supplied SMC zones. TradingView charts use an independent feed.">
+<meta name="description" content="One-time TradingView/OANDA price snapshot or daily Forex reference rates, with manually supplied SMC zones. Not a live trading signal feed.">
 <style>
 :root {
   --bg-primary: #0a0e17;
@@ -64,7 +64,7 @@ body {
   background: var(--red); animation: pulse 1.5s infinite;
 }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-.header-right { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-secondary); }
+.header-right { display: flex; flex-wrap: wrap; max-width: 100%; align-items: center; gap: 12px; font-size: 12px; color: var(--text-secondary); }
 .refresh-info { display: flex; align-items: center; gap: 4px; }
 .refresh-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 
@@ -123,6 +123,9 @@ body {
   transition: all 0.2s;
 }
 .instrument-card:hover { border-color: var(--blue); background: var(--bg-card-hover); }
+.card-header > div { min-width: 0; }
+.card-header > div:first-child { flex: 1; overflow-wrap: anywhere; }
+.card-header > div:last-child { flex-shrink: 0; }
 .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
 .card-symbol { font-size: 16px; font-weight: 700; }
 .card-price { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -387,7 +390,7 @@ body {
 <div class="header">
   <div class="header-left">
     <div class="logo">SMC <span>Dashboard</span></div>
-    <div class="badge-live">DAILY REFERENCE</div>
+    <div class="badge-live" id="data-mode-badge">SNAPSHOT</div>
   </div>
   <div class="header-right">
     <button class="alert-toggle active" id="alert-toggle-popup" onclick="toggleAlerts('popup')" title="Popup notifications">
@@ -403,11 +406,12 @@ body {
       <div class="refresh-dot"></div>
       <span id="last-update">Updating...</span>
     </div>
+    <label style="font-size:12px;">ข้อมูล <select id="price-source" onchange="setPriceSource(this.value)" style="background:var(--bg-card);color:var(--text-primary);padding:4px;border:1px solid var(--border);border-radius:4px;"><option value="snapshot">TradingView snapshot</option><option value="daily">Daily reference API</option></select></label>
     <span id="clock"></span>
   </div>
 </div>
 
-<p style="padding:8px 20px;color:var(--yellow);font-size:12px;">ราคา Forex ในการ์ดเป็นอัตราอ้างอิงรายวัน ไม่ใช่ราคาเรียลไทม์จาก TradingView · ทอง/น้ำมันยังไม่มีฟีดราคา · OB/FVG/TP/SL เป็นระดับอ้างอิงที่กำหนดไว้ ไม่ใช่ SMC ที่คำนวณจากแท่งเทียนสด</p>
+<p id="data-source-note" style="padding:8px 20px;color:var(--yellow);font-size:12px;">ราคา Forex ในการ์ดเป็นอัตราอ้างอิงรายวัน ไม่ใช่ราคาเรียลไทม์จาก TradingView · ทอง/น้ำมันยังไม่มีฟีดราคา · OB/FVG/TP/SL เป็นระดับอ้างอิงที่กำหนดไว้ ไม่ใช่ SMC ที่คำนวณจากแท่งเทียนสด</p>
 <!-- TradingView Ticker Widget -->
 <div class="ticker-strip">
   <div class="tradingview-widget-container" style="height:100%;width:100%">
@@ -535,7 +539,7 @@ body {
 </div>
 
 <div class="footer">
-  SMC Dashboard | Forex: daily exchange-rate reference API. Charts: independent TradingView feed. Gold/oil dashboard feed: not connected. | For educational purposes only<br>
+  SMC Dashboard | Cards: selectable TradingView/OANDA one-time snapshot or daily exchange-rate API. Charts: independent TradingView feed. No live broker feed is connected. | For educational purposes only<br>
   Not financial advice. Always manage your risk. &copy; 2026
 </div>
 
@@ -924,6 +928,124 @@ const INSTRUMENTS = {
   }
 };
 
+// One-time public-page observations, not a TradingView streaming feed.
+const TRADINGVIEW_SNAPSHOT = {
+  "EURUSD": {
+    "price": 1.12048,
+    "decimals": 5,
+    "observedAt": "2026-10-22T13:45:17.949352+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-EURUSD/",
+    "provider": "OANDA"
+  },
+  "GBPUSD": {
+    "price": 1.33748,
+    "decimals": 5,
+    "observedAt": "2026-10-22T13:45:18.045911+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-GBPUSD/",
+    "provider": "OANDA"
+  },
+  "USDJPY": {
+    "price": 157.246,
+    "decimals": 3,
+    "observedAt": "2026-10-22T13:45:18.170274+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-USDJPY/",
+    "provider": "OANDA"
+  },
+  "USDCHF": {
+    "price": 0.82339,
+    "decimals": 5,
+    "observedAt": "2026-10-22T13:45:18.294259+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-USDCHF/",
+    "provider": "OANDA"
+  },
+  "AUDUSD": {
+    "price": 0.70113,
+    "decimals": 5,
+    "observedAt": "2026-10-22T13:45:18.701168+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-AUDUSD/",
+    "provider": "OANDA"
+  },
+  "USDCAD": {
+    "price": 1.40312,
+    "decimals": 5,
+    "observedAt": "2026-10-22T13:45:18.834328+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-USDCAD/",
+    "provider": "OANDA"
+  },
+  "XAUUSD": {
+    "price": 4076.995,
+    "decimals": 3,
+    "observedAt": "2026-10-22T13:45:18.496677+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-XAUUSD/",
+    "provider": "OANDA"
+  },
+  "GBPJPY": {
+    "price": 210.168,
+    "decimals": 3,
+    "observedAt": "2026-10-22T13:45:18.588355+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-GBPJPY/",
+    "provider": "OANDA"
+  },
+  "GBPAUD": {
+    "price": 1.90722,
+    "decimals": 5,
+    "observedAt": "2026-10-22T13:45:19.021435+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-GBPAUD/",
+    "provider": "OANDA"
+  },
+  "GBPNZD": {
+    "price": 2.35562,
+    "decimals": 5,
+    "observedAt": "2026-10-22T13:45:19.081712+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-GBPNZD/",
+    "provider": "OANDA"
+  },
+  "GBPCAD": {
+    "price": 1.87724,
+    "decimals": 5,
+    "observedAt": "2026-10-22T13:45:19.159373+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-GBPCAD/",
+    "provider": "OANDA"
+  },
+  "EURJPY": {
+    "price": 175.992,
+    "decimals": 3,
+    "observedAt": "2026-10-22T13:45:19.218449+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-EURJPY/",
+    "provider": "OANDA"
+  },
+  "EURAUD": {
+    "price": 1.59803,
+    "decimals": 5,
+    "observedAt": "2026-10-22T13:45:19.641696+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-EURAUD/",
+    "provider": "OANDA"
+  },
+  "EURNZD": {
+    "price": 1.9737,
+    "decimals": 5,
+    "observedAt": "2026-10-22T13:45:19.516627+00:00",
+    "quoteTimestamp": null,
+    "url": "https://www.tradingview.com/symbols/OANDA-EURNZD/",
+    "provider": "OANDA"
+  }
+};
+let priceMode = 'snapshot';
+try { if (localStorage.getItem('marketDataMode') === 'daily') priceMode = 'daily'; } catch {}
+
 // Quote state is shared by overview, details, summary and alerts.
 const dynamicSMC = {};
 const quoteState = {};
@@ -931,22 +1053,24 @@ const MAX_QUOTE_AGE_MS = 36 * 60 * 60 * 1000;
 let pricesInFlight = false;
 
 function quoteUsable(q) {
-  return q && Number.isFinite(q.price) && q.price > 0 && !q.failed &&
+  return q && q.kind !== 'snapshot' && Number.isFinite(q.timestamp) && Number.isFinite(q.price) && q.price > 0 && !q.failed &&
     q.timestamp <= Date.now() + 5 * 60 * 1000 && Date.now() - q.timestamp <= MAX_QUOTE_AGE_MS;
 }
 
 function quoteLabel(key) {
   const q = quoteState[key];
   if (!q) return key === 'XAUUSD' || key === 'USOIL' ? 'No price feed connected' : 'Waiting for daily reference rate';
+  if (q.kind === 'snapshot') return 'TradingView / OANDA · ตรวจหน้าเว็บ ' + new Date(q.observedAt).toLocaleString('th-TH', {timeZone: 'Asia/Bangkok'}) + ' (UTC+7) · ไม่ทราบเวลา tick';
   const time = new Date(q.timestamp).toLocaleString('th-TH', {timeZone: 'Asia/Bangkok'});
   return `${quoteUsable(q) ? 'Daily reference' : 'Stale / unavailable'} · ${time} (UTC+7)`;
 }
 
 function displayedPrice(key) {
-  return Number.isFinite(lastRealPrices[key]) ? fmt(lastRealPrices[key], INSTRUMENTS[key].decimals) : '—';
+  return Number.isFinite(lastRealPrices[key]) ? fmt(lastRealPrices[key], quoteState[key]?.decimals ?? INSTRUMENTS[key].decimals) : '—';
 }
 
 function biasLabel(d) {
+  if (d.snapshot) return 'Snapshot · ไม่มีสัญญาณสด';
   return d.bias === 'bull' ? 'Rising since previous quote' : d.bias === 'bear' ? 'Falling since previous quote' : 'Waiting / unchanged';
 }
 
@@ -959,9 +1083,9 @@ function recalculateSMC(key, currentPrice) {
   // Keep the supplied reference zones fixed. Moving zones with each tick
   // would manufacture new entries and cannot establish an OHLC-based OB/FVG.
   dynamicSMC[key] = {
-    ...base, bias, choch: null,
+    ...base, bias, snapshot: q?.kind === 'snapshot', choch: null,
     structure: {type: 'Quote change', dir: bias === 'bull' ? 'bullish' : bias === 'bear' ? 'bearish' : 'neutral',
-      tf: 'daily reference', note: quoteLabel(key)},
+      tf: q?.kind === 'snapshot' ? 'snapshot' : 'daily reference', note: quoteLabel(key)},
     plan: `${biasLabel({bias})}. ${quoteLabel(key)}. OB/FVG, liquidity and targets below are manually supplied reference levels, not recalculated SMC signals. TradingView is an independent feed; candle data from the same provider is required for live SMC analysis.`
   };
 }
@@ -1002,7 +1126,7 @@ function referenceProximity(price, zone, range) {
 function renderCardContext(key, d, ob, fvg) {
   const q = quoteState[key];
   const range = d.swingHigh - d.swingLow;
-  const valid = quoteUsable(q) && Number.isFinite(range) && range > 0;
+  const valid = contextQuoteAvailable(q) && Number.isFinite(range) && range > 0;
   const price = valid ? q.price : null;
   const position = valid ? (price - d.swingLow) / range * 100 : null;
   const clamped = valid ? Math.max(0, Math.min(100, position)) : 0;
@@ -1028,7 +1152,7 @@ function renderOverviewCard(key, data) {
   const d = getDynamicData(key); // Use dynamic SMC data
   const biasClass = d.bias;
   const biasText = biasLabel(d);
-  const contextPrice = quoteUsable(quoteState[key]) ? quoteState[key].price : null;
+  const contextPrice = contextQuoteAvailable(quoteState[key]) ? quoteState[key].price : null;
   const mainOB = nearestReferenceZone(d.orderBlocks, contextPrice);
   const mainFVG = nearestReferenceZone(d.fvg, contextPrice);
 
@@ -1045,7 +1169,7 @@ function renderOverviewCard(key, data) {
     <div class="instrument-card" onclick="showDetail('${key}')">
       <div class="card-header">
         <div>
-          <div class="card-symbol">${d.name}</div><div style="font-size:11px;color:var(--text-secondary)">${quoteLabel(key)}</div>
+          <div class="card-symbol">${d.name}</div><div style="font-size:11px;color:var(--text-secondary)">${quoteLabel(key)}${quoteState[key]?.kind === 'snapshot' ? ` · <a href="${TRADINGVIEW_SNAPSHOT[key].url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:var(--blue)">แหล่งข้อมูล</a>` : ''}</div>
           <div class="card-bias ${biasClass}">${biasText}</div>
         </div>
         <div style="text-align:right;">
@@ -1290,7 +1414,7 @@ function renderSummaryRow(key, data) {
   const biasColor = d.bias === 'bull' ? 'var(--green)' : d.bias === 'bear' ? 'var(--red)' : 'var(--yellow)';
   const biasText = biasLabel(d);
   const structColor = d.structure.dir === 'bullish' ? 'var(--green)' : 'var(--red)';
-  const contextPrice = quoteUsable(quoteState[key]) ? quoteState[key].price : null;
+  const contextPrice = contextQuoteAvailable(quoteState[key]) ? quoteState[key].price : null;
   const mainOB = nearestReferenceZone(d.orderBlocks, contextPrice);
   const mainFVG = nearestReferenceZone(d.fvg, contextPrice);
   const mainLiq = d.liquidity.find(l => l.type === (d.bias === 'bull' ? 'BSL' : 'SSL'));
@@ -1375,6 +1499,51 @@ let lastRealPrices = {};
 
 let forexBaseData = null;
 
+function contextQuoteAvailable(q) {
+  return q?.kind === 'snapshot' ? Number.isFinite(q.price) && q.price > 0 : quoteUsable(q);
+}
+
+function seedTradingViewSnapshot() {
+  for (const [key, item] of Object.entries(TRADINGVIEW_SNAPSHOT)) {
+    quoteState[key] = {...item, kind: 'snapshot', timestamp: null, previousPrice: null, failed: false};
+    lastRealPrices[key] = item.price;
+    recalculateSMC(key, item.price);
+  }
+}
+
+function renderPriceSourceState() {
+  document.getElementById('price-source').value = priceMode;
+  document.getElementById('data-mode-badge').textContent = priceMode === 'snapshot' ? 'SNAPSHOT' : 'DAILY REFERENCE';
+  document.getElementById('data-source-note').textContent = priceMode === 'snapshot'
+    ? 'ราคา snapshot ที่อ่านจากหน้าสาธารณะ TradingView / OANDA ไม่ใช่ฟีดเรียลไทม์ · เวลาที่ระบุคือเวลาตรวจหน้าเว็บ ไม่ใช่เวลา tick · ไม่อัปเดตเองและไม่ใช้สร้างสัญญาณสด · OB/FVG/TP/SL ยังเป็นระดับอ้างอิงเดิม'
+    : 'ราคา Forex เป็นอัตราอ้างอิงรายวัน ไม่ใช่ราคาเรียลไทม์จาก TradingView · ทอง/น้ำมันยังไม่มีฟีดราคา · OB/FVG/TP/SL เป็นระดับอ้างอิงเดิม';
+  if (priceMode === 'snapshot') document.getElementById('last-update').textContent =
+    'TradingView snapshot · ตรวจหน้าเว็บ ' + new Date(TRADINGVIEW_SNAPSHOT.XAUUSD.observedAt).toLocaleString('th-TH', {timeZone:'Asia/Bangkok'}) + ' (UTC+7) · ไม่ใช่ Live';
+}
+
+function setPriceSource(mode) {
+  if (mode !== 'snapshot' && mode !== 'daily') return;
+  // Avoid mixing asynchronous daily responses with snapshot state.
+  if (pricesInFlight) {
+    document.getElementById('price-source').value = priceMode;
+    return;
+  }
+  priceMode = mode;
+  try { localStorage.setItem('marketDataMode', mode); } catch {}
+  for (const state of [quoteState, lastRealPrices, dynamicSMC]) {
+    for (const key of Object.keys(state)) delete state[key];
+  }
+  activeSignals = [];
+  updateSignalBadge();
+  if (mode === 'snapshot') seedTradingViewSnapshot();
+  renderPriceSourceState();
+  renderOverview();
+  renderSummaryTable();
+  refreshActiveDetail();
+  renderLiveAlerts();
+  if (mode === 'daily') fetchPrices();
+}
+
 function toggleAlerts(type) {
   alertSettings[type] = !alertSettings[type];
   const btn = document.getElementById('alert-toggle-' + type);
@@ -1421,6 +1590,7 @@ function getForexPrice(pair) {
 }
 
 async function fetchPrices() {
+  if (priceMode === 'snapshot') { renderPriceSourceState(); return; }
   if (pricesInFlight) return;
   pricesInFlight = true;
   try {
@@ -1479,7 +1649,7 @@ function refreshActiveDetail() {
 function updatePriceDisplay(key, price, change, decimals) {
   const changeClass = change >= 0 ? 'up' : 'down';
   const changeSign = change >= 0 ? '+' : '';
-  const priceStr = fmt(price, decimals);
+  const priceStr = displayedPrice(key);
   const changeStr = quoteUsable(quoteState[key]) && Number.isFinite(quoteState[key].previousPrice) ? changeSign + change.toFixed(2) + '% vs previous quote' : '—';
 
   // Overview card
@@ -1720,6 +1890,8 @@ function renderSummaryTable() {
 
 // ===== INIT =====
 function init() {
+  if (priceMode === 'snapshot') seedTradingViewSnapshot();
+  renderPriceSourceState();
   // Render overview cards
   const grid = document.getElementById('overview-grid');
   grid.innerHTML = Object.entries(INSTRUMENTS).map(([k, d]) => renderOverviewCard(k, d)).join('');
