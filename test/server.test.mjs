@@ -15,6 +15,13 @@ test('dashboard, readiness and disconnected feed status; private files cannot be
   const state = await (await fetch(base + '/api/status')).json();
   assert.equal(state.realtimeConnected, false);
   assert.equal(state.stage, 'web-server-only');
+  const callback = await fetch(base + '/auth/ctrader/callback');
+  assert.equal(callback.status, 200);
+  assert.match(await callback.text(), /not enabled yet/);
+  const prematureAuth = await fetch(base + '/auth/ctrader/callback?code=must-not-appear-in-page');
+  assert.equal(prematureAuth.status, 503);
+  assert.equal(prematureAuth.headers.get('referrer-policy'), 'no-referrer');
+  assert.doesNotMatch(await prematureAuth.text(), /must-not-appear-in-page/);
   for (const path of ['/.env', '/server.mjs', '/package.json', '/.git/config', '/%2e%2e/.env']) {
     assert.equal((await fetch(base + path)).status, 404, path);
   }

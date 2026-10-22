@@ -17,7 +17,7 @@ Create a **Web Service** from `kittayatrikisyakul-boop/Kittaya`:
 
 Select your preferred instance plan after checking its cost. Free instances may sleep and should not be relied on for an uninterrupted market-data connection. No API keys are needed to deploy the current web server. Render supplies `PORT`; the server binds to `0.0.0.0`.
 
-After deployment, open the HTTPS service URL shown by Render. Confirm the dashboard loads and `/healthz` returns `{"status":"ok","service":"smc-dashboard"}`. Obtain this URL before configuring a broker OAuth callback. Do not configure a callback path until its handler is implemented.
+After deployment, open the HTTPS service URL shown by Render. Confirm the dashboard loads and `/healthz` returns `{"status":"ok","service":"smc-dashboard"}`. The reserved broker redirect URL is `https://kittaya.onrender.com/auth/ctrader/callback`. It displays a setup notice only; it does not exchange authorization codes or connect a broker account. Authorization requests are refused until the OAuth flow is implemented. Registering this URL in the developer application does not enable authentication or live data.
 
 GitHub Pages continues to host static HTML only; server-side endpoints require the Render service.
 

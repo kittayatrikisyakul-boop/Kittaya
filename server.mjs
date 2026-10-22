@@ -21,6 +21,15 @@ export function createServer() {
     if (path === '/healthz') {
       body = JSON.stringify({ status: 'ok', service: 'smc-dashboard' });
       contentType = 'application/json; charset=utf-8';
+    } else if (path === '/auth/ctrader/callback') {
+      // Reserve the registered redirect endpoint without accepting broker
+      // authorization codes before a verified OAuth flow is installed.
+      const query = new URL(req.url, 'http://localhost').searchParams;
+      status = query.has('code') || query.has('error') ? 503 : 200;
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+      body = '<!doctype html><html lang="th"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>cTrader connection setup</title><h1>cTrader connection setup</h1><p>Redirect endpoint registered for Kittaya Dashboard.</p><p>OAuth token exchange and live broker data are not enabled yet. Do not start account authorization until the connection flow is configured.</p><p>หน้านี้เตรียมไว้สำหรับตั้งค่าแอป ยังไม่ได้เชื่อมบัญชีหรือรับราคาเรียลไทม์</p></html>';
+      contentType = 'text/html; charset=utf-8';
     } else if (path === '/api/status') {
       body = JSON.stringify({
         realtimeConnected: false,
