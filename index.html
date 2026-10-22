@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SMC Real-Time Dashboard | Smart Money Concepts</title>
-<meta name="description" content="Real-time Smart Money Concepts analysis for Forex, Gold, and Oil. Order Blocks, Fair Value Gaps, Break of Structure, and Liquidity zones.">
+<title>SMC Dashboard | Smart Money Concepts</title>
+<meta name="description" content="Daily Forex reference rates with manually supplied SMC zones. TradingView charts use an independent feed.">
 <style>
 :root {
   --bg-primary: #0a0e17;
@@ -370,7 +370,7 @@ body {
 <div class="header">
   <div class="header-left">
     <div class="logo">SMC <span>Dashboard</span></div>
-    <div class="badge-live">LIVE</div>
+    <div class="badge-live">DAILY REFERENCE</div>
   </div>
   <div class="header-right">
     <button class="alert-toggle active" id="alert-toggle-popup" onclick="toggleAlerts('popup')" title="Popup notifications">
@@ -390,6 +390,7 @@ body {
   </div>
 </div>
 
+<p style="padding:8px 20px;color:var(--yellow);font-size:12px;">ราคา Forex ในการ์ดเป็นอัตราอ้างอิงรายวัน ไม่ใช่ราคาเรียลไทม์จาก TradingView · ทอง/น้ำมันยังไม่มีฟีดราคา · OB/FVG/TP/SL เป็นระดับอ้างอิงที่กำหนดไว้ ไม่ใช่ SMC ที่คำนวณจากแท่งเทียนสด</p>
 <!-- TradingView Ticker Widget -->
 <div class="ticker-strip">
   <div class="tradingview-widget-container" style="height:100%;width:100%">
@@ -491,9 +492,9 @@ body {
   <!-- ALERTS VIEW -->
   <div class="view" id="view-alerts">
     <div class="alerts-panel">
-      <h3 style="font-size:14px;font-weight:600;margin-bottom:4px;">SMC Signal Alerts</h3>
+      <h3 style="font-size:14px;font-weight:600;margin-bottom:4px;">Reference Zone Alerts</h3>
       <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
-        Live signals trigger when price enters Order Blocks, FVG zones, or near liquidity levels.
+        Reference alerts use new daily quotes crossing fixed, manually supplied zones. These are not live SMC confirmations. Gold and oil alerts require a connected price feed.
         Toggle <strong>Popup</strong> for desktop notifications and <strong>Sound</strong> for audio alerts.
       </p>
       <div id="alerts-list"></div>
@@ -517,7 +518,7 @@ body {
 </div>
 
 <div class="footer">
-  SMC Real-Time Dashboard | Data from TradingView | For educational purposes only<br>
+  SMC Dashboard | Forex: daily exchange-rate reference API. Charts: independent TradingView feed. Gold/oil dashboard feed: not connected. | For educational purposes only<br>
   Not financial advice. Always manage your risk. &copy; 2026
 </div>
 
@@ -906,108 +907,51 @@ const INSTRUMENTS = {
   }
 };
 
-// ===== DYNAMIC SMC ENGINE =====
-const dynamicSMC = {}; // Stores recalculated SMC data per instrument
-let priceHistory = {}; // Track recent prices for momentum detection
+// Quote state is shared by overview, details, summary and alerts.
+const dynamicSMC = {};
+const quoteState = {};
+const MAX_QUOTE_AGE_MS = 36 * 60 * 60 * 1000;
+let pricesInFlight = false;
+
+function quoteUsable(q) {
+  return q && Number.isFinite(q.price) && q.price > 0 && !q.failed &&
+    q.timestamp <= Date.now() + 5 * 60 * 1000 && Date.now() - q.timestamp <= MAX_QUOTE_AGE_MS;
+}
+
+function quoteLabel(key) {
+  const q = quoteState[key];
+  if (!q) return key === 'XAUUSD' || key === 'USOIL' ? 'No price feed connected' : 'Waiting for daily reference rate';
+  const time = new Date(q.timestamp).toLocaleString('th-TH', {timeZone: 'Asia/Bangkok'});
+  return `${quoteUsable(q) ? 'Daily reference' : 'Stale / unavailable'} · ${time} (UTC+7)`;
+}
+
+function displayedPrice(key) {
+  return Number.isFinite(lastRealPrices[key]) ? fmt(lastRealPrices[key], INSTRUMENTS[key].decimals) : '—';
+}
+
+function biasLabel(d) {
+  return d.bias === 'bull' ? 'Rising since previous quote' : d.bias === 'bear' ? 'Falling since previous quote' : 'Waiting / unchanged';
+}
 
 function recalculateSMC(key, currentPrice) {
   const base = INSTRUMENTS[key];
-  if (!base || !currentPrice) return;
-
-  const mid = (base.swingHigh + base.swingLow) / 2;
-  const range = base.swingHigh - base.swingLow;
-  const pricePct = ((currentPrice - base.swingLow) / range) * 100;
-
-  // Determine dynamic bias based on price position
-  const newBias = currentPrice >= mid ? 'bull' : 'bear';
-
-  // Detect momentum from recent prices
-  const history = priceHistory[key] || [];
-  history.push(currentPrice);
-  if (history.length > 5) history.shift();
-  priceHistory[key] = history;
-
-  let momentum = 0;
-  if (history.length >= 3) {
-    momentum = history[history.length - 1] - history[0];
-  }
-
-  // Determine structure direction
-  const structDir = momentum >= 0 ? 'bullish' : 'bearish';
-  const structType = Math.abs(momentum) > range * 0.01 ? 'BOS' : 'Consolidation';
-
-  // Dynamic order blocks around current price (store as numbers, not arrays in arrays)
-  const obWidth = range * 0.015; // 1.5% of range
-  const demandOBLo = currentPrice - obWidth * 2;
-  const demandOBHi = currentPrice - obWidth;
-  const supplyOBLo = currentPrice + obWidth;
-  const supplyOBHi = currentPrice + obWidth * 2;
-
-  // Dynamic FVG zones
-  const fvgWidth = range * 0.008;
-  const bullishFVGLo = currentPrice - fvgWidth;
-  const bullishFVGHi = currentPrice;
-  const bearishFVGLo = currentPrice;
-  const bearishFVGHi = currentPrice + fvgWidth;
-
-  // Dynamic liquidity levels
-  const bslNear = base.swingHigh - range * 0.02;
-  const sslNear = base.swingLow + range * 0.02;
-
-  // Dynamic TP/SL based on bias
-  const tpGap = range * 0.04;
-
-  let entryLo, entryHi, sl, tp1, tp2, tp3, direction;
-  if (newBias === 'bull') {
-    entryLo = demandOBLo;
-    entryHi = demandOBHi;
-    sl = sslNear;
-    tp1 = currentPrice + tpGap;
-    tp2 = bslNear;
-    tp3 = base.swingHigh;
-    direction = 'long';
-  } else {
-    entryLo = supplyOBLo;
-    entryHi = supplyOBHi;
-    sl = bslNear;
-    tp1 = currentPrice - tpGap;
-    tp2 = sslNear;
-    tp3 = base.swingLow;
-    direction = 'short';
-  }
-
-  // Store dynamic SMC data with explicit number values
+  const q = quoteState[key];
+  if (!base) return;
+  const change = quoteUsable(q) && Number.isFinite(q.previousPrice) ? currentPrice - q.previousPrice : 0;
+  const bias = change > 0 ? 'bull' : change < 0 ? 'bear' : 'neutral';
+  // Keep the supplied reference zones fixed. Moving zones with each tick
+  // would manufacture new entries and cannot establish an OHLC-based OB/FVG.
   dynamicSMC[key] = {
-    name: base.name,
-    id: base.id,
-    tvSymbol: base.tvSymbol,
-    decimals: base.decimals,
-    swingHigh: base.swingHigh,
-    swingLow: base.swingLow,
-    bias: newBias,
-    structure: { type: structType, dir: structDir, tf: 'H4', note: `Dynamic — price at ${pricePct.toFixed(1)}% of range` },
-    choch: null,
-    orderBlocks: [
-      { type: 'demand', zone: [demandOBLo, demandOBHi], note: 'Dynamic demand OB near current price', strength: 'strong' },
-      { type: 'supply', zone: [supplyOBLo, supplyOBHi], note: 'Dynamic supply OB near current price', strength: 'strong' }
-    ],
-    fvg: [
-      { zone: [bullishFVGLo, bullishFVGHi], dir: 'bullish', note: 'Dynamic bullish FVG' },
-      { zone: [bearishFVGLo, bearishFVGHi], dir: 'bearish', note: 'Dynamic bearish FVG' }
-    ],
-    liquidity: [
-      { type: 'BSL', level: bslNear, note: 'Near-term buy-side liquidity' },
-      { type: 'BSL', level: base.swingHigh, note: 'Major swing high' },
-      { type: 'SSL', level: sslNear, note: 'Near-term sell-side liquidity' },
-      { type: 'SSL', level: base.swingLow, note: 'Major swing low' }
-    ],
-    targets: { bull: [bslNear, base.swingHigh], bear: [sslNear, base.swingLow] },
-    tp: { entry: [entryLo, entryHi], sl, tp1, tp2, tp3, direction }
+    ...base, bias, choch: null,
+    structure: {type: 'Quote change', dir: bias === 'bull' ? 'bullish' : bias === 'bear' ? 'bearish' : 'neutral',
+      tf: 'daily reference', note: quoteLabel(key)},
+    plan: `${biasLabel({bias})}. ${quoteLabel(key)}. OB/FVG, liquidity and targets below are manually supplied reference levels, not recalculated SMC signals. TradingView is an independent feed; candle data from the same provider is required for live SMC analysis.`
   };
 }
 
 function getDynamicData(key) {
-  return dynamicSMC[key] || INSTRUMENTS[key];
+  if (!dynamicSMC[key]) recalculateSMC(key, lastRealPrices[key]);
+  return dynamicSMC[key];
 }
 
 // ===== RENDER FUNCTIONS =====
@@ -1017,25 +961,25 @@ function fmt(val, decimals) {
 
 function renderOverviewCard(key, data) {
   const d = getDynamicData(key); // Use dynamic SMC data
-  const biasClass = d.bias === 'bull' ? 'bull' : 'bear';
-  const biasText = d.bias === 'bull' ? 'Bullish' : 'Bearish';
+  const biasClass = d.bias;
+  const biasText = biasLabel(d);
   const mainOB = d.orderBlocks.find(ob => ob.strength === 'strong' && ob.type === (d.bias === 'bull' ? 'demand' : 'supply'));
   const mainFVG = d.fvg[0];
 
   // Get current price from lastRealPrices or fallback to midpoint
   const currentPrice = lastRealPrices[key] || (d.swingLow + (d.swingHigh - d.swingLow) * 0.5);
-  const prevClose = d.swingLow + (d.swingHigh - d.swingLow) * 0.5;
+  const prevClose = quoteState[key]?.previousPrice || currentPrice;
   const change = ((currentPrice - prevClose) / prevClose * 100);
   const changeClass = change >= 0 ? 'up' : 'down';
   const changeSign = change >= 0 ? '+' : '';
-  const priceStr = fmt(currentPrice, d.decimals);
-  const changeStr = changeSign + change.toFixed(2) + '%';
+  const priceStr = displayedPrice(key);
+  const changeStr = quoteUsable(quoteState[key]) && Number.isFinite(quoteState[key].previousPrice) ? changeSign + change.toFixed(2) + '% vs previous quote' : '—';
 
   return `
     <div class="instrument-card" onclick="showDetail('${key}')">
       <div class="card-header">
         <div>
-          <div class="card-symbol">${d.name}</div>
+          <div class="card-symbol">${d.name}</div><div style="font-size:11px;color:var(--text-secondary)">${quoteLabel(key)}</div>
           <div class="card-bias ${biasClass}">${biasText}</div>
         </div>
         <div style="text-align:right;">
@@ -1050,18 +994,18 @@ function renderOverviewCard(key, data) {
       </div>
       <div class="card-levels" style="margin-top:8px;">
         <div class="level-item">
-          <span class="level-label">Key OB</span>
+          <span class="level-label">Reference OB</span>
           <span class="level-value ${mainOB ? (mainOB.type === 'demand' ? 'dem' : 'sup') : ''}">${mainOB ? fmt(mainOB.zone[0], d.decimals) + '-' + fmt(mainOB.zone[1], d.decimals) : '—'}</span>
         </div>
         <div class="level-item">
-          <span class="level-label">Target</span>
+          <span class="level-label">Reference target</span>
           <span class="level-value ${d.bias === 'bull' ? 'dem' : 'res'}">${fmt(d.targets[d.bias === 'bull' ? 'bull' : 'bear'][0], d.decimals)}</span>
         </div>
       </div>
-      <div class="card-tp-row">
-        <span class="card-tp-badge tp1">TP1: ${fmt(d.tp.tp1, d.decimals)}</span>
-        <span class="card-tp-badge tp2">TP2: ${fmt(d.tp.tp2, d.decimals)}</span>
-        <span class="card-tp-badge tp3">TP3: ${fmt(d.tp.tp3, d.decimals)}</span>
+      <div class="card-tp-row" title="Manually supplied reference targets; not live signals">
+        <span class="card-tp-badge tp1">Reference TP1: ${fmt(d.tp.tp1, d.decimals)}</span>
+        <span class="card-tp-badge tp2">Ref TP2: ${fmt(d.tp.tp2, d.decimals)}</span>
+        <span class="card-tp-badge tp3">Ref TP3: ${fmt(d.tp.tp3, d.decimals)}</span>
       </div>
     </div>
   `;
@@ -1069,8 +1013,8 @@ function renderOverviewCard(key, data) {
 
 function renderDetailView(key, data) {
   const d = getDynamicData(key); // Use dynamic SMC data
-  const biasClass = d.bias === 'bull' ? 'bull' : 'bear';
-  const biasText = d.bias === 'bull' ? 'Bullish' : 'Bearish';
+  const biasClass = d.bias;
+  const biasText = biasLabel(d);
   const rangeSize = d.swingHigh - d.swingLow;
 
   const obRows = d.orderBlocks.map(ob => {
@@ -1110,7 +1054,7 @@ function renderDetailView(key, data) {
         <div style="font-size:20px;font-weight:700;">${d.name}</div>
         <div class="card-bias ${biasClass}" style="margin-top:4px;">${biasText}</div>
       </div>
-      <div class="detail-price" id="detail-price-${key}">—</div>
+      <div class="detail-price" id="detail-price-${key}">${displayedPrice(key)}</div>
       <div class="detail-change" id="detail-change-${key}">—</div>
     </div>
 
@@ -1171,12 +1115,12 @@ function renderDetailView(key, data) {
 
     <div class="detail-grid">
       <div class="detail-card">
-        <h3>Order Blocks (OB)</h3>
+        <h3>Reference Order Blocks (manual)</h3>
         <table class="level-table">${obRows}</table>
       </div>
 
       <div class="detail-card">
-        <h3>Fair Value Gaps (FVG) & Liquidity</h3>
+        <h3>Reference FVG & Liquidity (manual)</h3>
         <table class="level-table">${fvgRows}</table>
         <div style="margin-top:12px;">
           <table class="level-table">${liqRows}</table>
@@ -1201,7 +1145,7 @@ function renderDetailView(key, data) {
           <tr><td class="type-col">Equilibrium</td><td class="zone-col">${fmt((d.swingHigh + d.swingLow) / 2, d.decimals)}</td></tr>
         </table>
 
-        <h3 style="margin-top:16px;">Trade Targets</h3>
+        <h3 style="margin-top:16px;">Reference Targets (manual)</h3>
         <table class="level-table">
           <tr><td class="type-col" style="color:var(--green);">Bullish</td><td class="zone-col">${d.targets.bull.map(t => fmt(t, d.decimals)).join(' → ')}</td></tr>
           <tr><td class="type-col" style="color:var(--red);">Bearish</td><td class="zone-col">${d.targets.bear.map(t => fmt(t, d.decimals)).join(' → ')}</td></tr>
@@ -1209,7 +1153,7 @@ function renderDetailView(key, data) {
       </div>
 
       <div class="detail-card">
-        <h3>🎯 Entry / TP / SL</h3>
+        <h3>🎯 Reference Entry / TP / SL (manual)</h3>
         <div class="tp-card entry">
           <div>
             <div class="tp-card-label">ENTRY ${d.tp.direction === 'long' ? '(BUY)' : '(SELL)'}</div>
@@ -1258,7 +1202,7 @@ function renderDetailView(key, data) {
       </div>
 
       <div class="detail-card">
-        <h3>SMC Trade Plan</h3>
+        <h3>Quote status & reference plan</h3>
         <div class="trade-plan ${d.bias}">${d.plan}</div>
 
         <h3 style="margin-top:16px;">Key Reminders</h3>
@@ -1276,8 +1220,8 @@ function renderDetailView(key, data) {
 
 function renderSummaryRow(key, data) {
   const d = getDynamicData(key); // Use dynamic SMC data
-  const biasColor = d.bias === 'bull' ? 'var(--green)' : 'var(--red)';
-  const biasText = d.bias === 'bull' ? 'Bullish' : 'Bearish';
+  const biasColor = d.bias === 'bull' ? 'var(--green)' : d.bias === 'bear' ? 'var(--red)' : 'var(--yellow)';
+  const biasText = biasLabel(d);
   const structColor = d.structure.dir === 'bullish' ? 'var(--green)' : 'var(--red)';
   const mainOB = d.orderBlocks.find(ob => ob.strength === 'strong' && ob.type === (d.bias === 'bull' ? 'demand' : 'supply'));
   const mainFVG = d.fvg[0];
@@ -1285,7 +1229,7 @@ function renderSummaryRow(key, data) {
 
   // Get current price from lastRealPrices or fallback to midpoint
   const currentPrice = lastRealPrices[key] || (d.swingLow + (d.swingHigh - d.swingLow) * 0.5);
-  const priceStr = fmt(currentPrice, d.decimals);
+  const priceStr = displayedPrice(key);
   const pos = ((currentPrice - d.swingLow) / (d.swingHigh - d.swingLow) * 100);
   const pdZone = pos > 65 ? 'Premium' : pos < 35 ? 'Discount' : 'Equilibrium';
 
@@ -1302,42 +1246,7 @@ function renderSummaryRow(key, data) {
   </tr>`;
 }
 
-function renderAlerts() {
-  const alerts = [];
-  Object.entries(INSTRUMENTS).forEach(([key, d]) => {
-    if (d.choch) {
-      alerts.push({
-        type: d.choch.dir === 'bullish' ? 'bullish' : 'bearish',
-        icon: d.choch.dir === 'bullish' ? '🟢' : '🔴',
-        text: `${d.name}: ${d.choch.type} ${d.choch.dir} on ${d.choch.tf} — ${d.choch.note}`,
-        time: 'Active'
-      });
-    }
-    alerts.push({
-      type: d.structure.dir === 'bullish' ? 'bullish' : 'bearish',
-      icon: d.structure.dir === 'bullish' ? '📈' : '📉',
-      text: `${d.name}: ${d.structure.type} ${d.structure.dir} on ${d.structure.tf} — ${d.structure.note}`,
-      time: 'Active'
-    });
-    d.fvg.forEach(f => {
-      alerts.push({
-        type: 'neutral',
-        icon: '🟣',
-        text: `${d.name}: ${f.dir === 'bullish' ? 'Bullish' : 'Bearish'} FVG at ${fmt(f.zone[0], d.decimals)}-${fmt(f.zone[1], d.decimals)} — ${f.note}`,
-        time: 'Pending'
-      });
-    });
-  });
-
-  const container = document.getElementById('alerts-list');
-  container.innerHTML = alerts.map(a => `
-    <div class="alert-item ${a.type}">
-      <span class="alert-icon">${a.icon}</span>
-      <span>${a.text}</span>
-      <span class="alert-time">${a.time}</span>
-    </div>
-  `).join('');
-}
+function renderAlerts() { renderLiveAlerts(); }
 
 // ===== NAVIGATION =====
 function showDetail(key) {
@@ -1355,6 +1264,7 @@ function showDetail(key) {
   const tab = document.querySelector(`.nav-tab[data-view="${viewName}"]`);
   if (tab) tab.classList.add('active');
 
+  refreshActiveDetail();
   // Initialize TradingView chart for this symbol
   setTimeout(() => initTVChart(key), 300);
 }
@@ -1394,24 +1304,29 @@ function initTVChart(key) {
 let alertSettings = { popup: true, sound: false };
 let activeSignals = [];
 let lastRealPrices = {};
-let simulatedPrices = { XAUUSD: 4092, USOIL: 99.86 };
+
 let forexBaseData = null;
 
 function toggleAlerts(type) {
   alertSettings[type] = !alertSettings[type];
   const btn = document.getElementById('alert-toggle-' + type);
   if (btn) btn.classList.toggle('active', alertSettings[type]);
-  if (type === 'popup' && alertSettings.popup && Notification.permission === 'default') {
+  if (type === 'popup' && alertSettings.popup && 'Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
   }
 }
 
 async function fetchForexRates() {
   try {
-    const r = await fetch('https://open.er-api.com/v6/latest/USD');
-    if (r.ok) { forexBaseData = await r.json(); return true; }
-  } catch (e) {}
-  return false;
+    const r = await fetch('https://open.er-api.com/v6/latest/USD', {signal: AbortSignal.timeout(10000)});
+    if (!r.ok) return false;
+    const data = await r.json();
+    if (data.result !== 'success' || data.base_code !== 'USD' || !data.rates ||
+        !Number.isFinite(data.time_last_update_unix) || data.time_last_update_unix <= 0 ||
+        data.time_last_update_unix * 1000 > Date.now() + 5 * 60 * 1000) return false;
+    forexBaseData = data;
+    return true;
+  } catch (e) { return false; }
 }
 
 function getForexPrice(pair) {
@@ -1437,60 +1352,67 @@ function getForexPrice(pair) {
   } catch (e) { return null; }
 }
 
-function simulateTick(key, lastPrice) {
-  const volatility = (key === 'XAUUSD') ? 0.8 : (key === 'USOIL') ? 0.05 : 0.0001;
-  const change = (Math.random() - 0.5) * 2 * volatility;
-  return Math.max(lastPrice * 0.95, Math.min(lastPrice * 1.05, lastPrice + change));
+async function fetchPrices() {
+  if (pricesInFlight) return;
+  pricesInFlight = true;
+  try {
+    const gotForex = await fetchForexRates();
+    Object.entries(INSTRUMENTS).forEach(([key, data]) => {
+      const previous = quoteState[key];
+      const price = gotForex ? getForexPrice(data.tvSymbol) : null;
+      const timestamp = gotForex ? forexBaseData.time_last_update_unix * 1000 : 0;
+      if (!Number.isFinite(price) || price <= 0) {
+        if (previous) previous.failed = true;
+        recalculateSMC(key, lastRealPrices[key]);
+        return;
+      }
+      // Re-polling the same daily publication is not a new market tick.
+      const isNew = !previous || timestamp > previous.timestamp;
+      if (isNew) {
+        const continuous = quoteUsable(previous) && timestamp - previous.timestamp <= MAX_QUOTE_AGE_MS;
+        quoteState[key] = {price, timestamp, previousPrice: continuous ? previous.price : null, failed: false};
+        lastRealPrices[key] = price;
+        recalculateSMC(key, price);
+        if (continuous && quoteUsable(quoteState[key]) && price !== previous.price) {
+          checkSignals(key, price, previous.price, getDynamicData(key));
+        }
+      } else {
+        previous.failed = timestamp < previous.timestamp;
+        recalculateSMC(key, previous.price);
+      }
+    });
+    renderOverview();
+    renderSummaryTable();
+    refreshActiveDetail();
+    renderLiveAlerts();
+    document.getElementById('last-update').textContent =
+      'Checked: ' + new Date().toLocaleTimeString('th-TH', {timeZone: 'Asia/Bangkok'}) +
+      (gotForex ? ' · Daily reference rates (not real-time)' : ' · API unavailable; alerts paused');
+  } finally { pricesInFlight = false; }
 }
 
-async function fetchPrices() {
-  const gotForex = await fetchForexRates();
-  const now = new Date();
-
-  Object.entries(INSTRUMENTS).forEach(([key, data]) => {
-    let price = null;
-    const forexSymbols = ['OANDA:EURUSD','OANDA:GBPUSD','OANDA:USDJPY','OANDA:USDCHF','OANDA:AUDUSD','OANDA:USDCAD','OANDA:GBPJPY','OANDA:GBPAUD','OANDA:GBPNZD','OANDA:GBPCAD','OANDA:EURJPY','OANDA:EURAUD','OANDA:EURNZD'];
-    const isForex = forexSymbols.includes(data.tvSymbol);
-
-    if (isForex && gotForex) {
-      price = getForexPrice(data.tvSymbol);
-    }
-
-    if (!isForex) {
-      simulatedPrices[key] = simulateTick(key, simulatedPrices[key]);
-      price = simulatedPrices[key];
-    }
-
-    // Fallback: use last known price or midpoint if API fails
-    if (price === null || price === undefined) {
-      price = lastRealPrices[key] || (data.swingLow + (data.swingHigh - data.swingLow) * 0.5);
-    }
-
-    const prevPrice = lastRealPrices[key] || price;
-    const prevClose = data.swingLow + (data.swingHigh - data.swingLow) * 0.5;
-    const change = ((price - prevClose) / prevClose * 100);
-    lastRealPrices[key] = price;
-
-    // Recalculate dynamic SMC data
-    recalculateSMC(key, price);
-
-    updatePriceDisplay(key, price, change, data.decimals);
-    checkSignals(key, price, prevPrice, data);
-  });
-
-  // Always re-render overview and summary with latest dynamic data
-  renderOverview();
-  renderSummaryTable();
-
-  const src = gotForex ? 'Live API' : 'Cached/Fallback';
-  document.getElementById('last-update').textContent = 'Updated: ' + now.toLocaleTimeString() + ' (' + src + ')';
+function refreshActiveDetail() {
+  const view = document.querySelector('.view.active');
+  if (!view) return;
+  const key = view.id.replace('view-', '').toUpperCase();
+  if (!INSTRUMENTS[key]) return;
+  // Preserve the chart iframe and its selected timeframe across refreshes.
+  const holder = document.createElement('div');
+  holder.innerHTML = renderDetailView(key, getDynamicData(key));
+  for (const selector of ['.detail-header', '.card-tags', '.detail-grid']) {
+    const old = view.querySelector(selector);
+    const next = holder.querySelector(selector);
+    if (old && next) old.replaceWith(next);
+  }
+  const q = quoteState[key];
+  if (q) updatePriceDisplay(key, q.price, q.previousPrice ? (q.price - q.previousPrice) / q.previousPrice * 100 : 0, INSTRUMENTS[key].decimals);
 }
 
 function updatePriceDisplay(key, price, change, decimals) {
   const changeClass = change >= 0 ? 'up' : 'down';
   const changeSign = change >= 0 ? '+' : '';
   const priceStr = fmt(price, decimals);
-  const changeStr = changeSign + change.toFixed(2) + '%';
+  const changeStr = quoteUsable(quoteState[key]) && Number.isFinite(quoteState[key].previousPrice) ? changeSign + change.toFixed(2) + '% vs previous quote' : '—';
 
   // Overview card
   const priceEl = document.getElementById('price-' + key);
@@ -1503,8 +1425,8 @@ function updatePriceDisplay(key, price, change, decimals) {
   if (dynData) {
     const biasEl = document.querySelector(`#price-${key}`)?.closest('.instrument-card')?.querySelector('.card-bias');
     if (biasEl) {
-      biasEl.textContent = dynData.bias === 'bull' ? 'Bullish' : 'Bearish';
-      biasEl.className = 'card-bias ' + (dynData.bias === 'bull' ? 'bull' : 'bear');
+      biasEl.textContent = biasLabel(dynData);
+      biasEl.className = 'card-bias ' + dynData.bias;
     }
   }
 
@@ -1528,7 +1450,7 @@ function updatePriceDisplay(key, price, change, decimals) {
 
 // ===== SIGNAL DETECTION =====
 function checkSignals(key, price, prevPrice, data) {
-  if (!price || !prevPrice) return;
+  if (!quoteUsable(quoteState[key]) || !Number.isFinite(prevPrice) || price === prevPrice) return;
 
   const newSignals = [];
 
@@ -1542,7 +1464,7 @@ function checkSignals(key, price, prevPrice, data) {
         newSignals.push({
           key, price, ob,
           type: isDemand ? 'buy' : 'sell',
-          title: (isDemand ? '🟢 BUY' : '🔴 SELL') + ' Signal — ' + data.name,
+          title: (isDemand ? '🟢 Demand reference' : '🔴 Supply reference') + ' zone entry — ' + data.name,
           detail: `Price entered ${ob.type === 'demand' ? 'Demand' : 'Supply'} OB: ${fmt(lo, data.decimals)}–${fmt(hi, data.decimals)}\n${ob.note}`,
           level: fmt(lo, data.decimals) + '–' + fmt(hi, data.decimals)
         });
@@ -1560,7 +1482,7 @@ function checkSignals(key, price, prevPrice, data) {
         newSignals.push({
           key, price, fvg,
           type: isBullish ? 'buy' : 'sell',
-          title: (isBullish ? '🟢 BUY' : '🔴 SELL') + ' Signal — ' + data.name,
+          title: (isBullish ? '🟢 Demand reference' : '🔴 Supply reference') + ' zone entry — ' + data.name,
           detail: `Price filling ${fvg.dir} FVG: ${fmt(lo, data.decimals)}–${fmt(hi, data.decimals)}\n${fvg.note}`,
           level: fmt(lo, data.decimals) + '–' + fmt(hi, data.decimals)
         });
@@ -1578,7 +1500,7 @@ function checkSignals(key, price, prevPrice, data) {
         newSignals.push({
           key, price, liq,
           type: 'neutral',
-          title: '⚡ Liquidity Sweep — ' + data.name,
+          title: '⚡ Reference liquidity proximity — ' + data.name,
           detail: `Price near ${liq.type}: ${fmt(liq.level, data.decimals)}\n${liq.note}`,
           level: fmt(liq.level, data.decimals)
         });
@@ -1588,7 +1510,8 @@ function checkSignals(key, price, prevPrice, data) {
 
   // Process new signals
   newSignals.forEach(signal => {
-    signal.time = new Date().toLocaleTimeString();
+    signal.time = new Date(quoteState[key].timestamp).toLocaleString('th-TH', {timeZone: 'Asia/Bangkok'});
+    signal.timestamp = quoteState[key].timestamp;
     activeSignals.unshift(signal);
     if (activeSignals.length > 50) activeSignals.length = 50;
 
@@ -1630,7 +1553,7 @@ function showPopup(signal, data) {
 }
 
 function showBrowserNotification(signal) {
-  if (Notification.permission === 'granted') {
+  if ('Notification' in window && Notification.permission === 'granted') {
     const icon = signal.type === 'buy' ? '🟢' : signal.type === 'sell' ? '🔴' : '⚡';
     const n = new Notification(icon + ' ' + signal.title, {
       body: signal.detail.replace(/\n/g, ' '),
@@ -1669,23 +1592,10 @@ function renderLiveAlerts() {
   const container = document.getElementById('alerts-list');
   if (!container) return;
 
-  // Combine static SMC alerts with live signals
-  const staticAlerts = [];
-  Object.entries(INSTRUMENTS).forEach(([key, d]) => {
-    if (d.choch) {
-      staticAlerts.push({
-        type: d.choch.dir === 'bullish' ? 'bullish' : 'bearish',
-        icon: d.choch.dir === 'bullish' ? '🟢' : '🔴',
-        text: `${d.name}: ${d.choch.type} ${d.choch.dir} on ${d.choch.tf} — ${d.choch.note}`,
-        time: 'Active'
-      });
-    }
-    staticAlerts.push({
-      type: d.structure.dir === 'bullish' ? 'bullish' : 'bearish',
-      icon: d.structure.dir === 'bullish' ? '📈' : '📉',
-      text: `${d.name}: ${d.structure.type} ${d.structure.dir} on ${d.structure.tf} — ${d.structure.note}`,
-      time: 'Active'
-    });
+  const staticAlerts = Object.keys(INSTRUMENTS).map(key => {
+    const d = getDynamicData(key);
+    return {type: d.bias === 'bull' ? 'bullish' : d.bias === 'bear' ? 'bearish' : 'neutral',
+      icon: '•', text: `${d.name}: ${biasLabel(d)} · ${quoteLabel(key)}`, time: 'Quote status'};
   });
 
   const liveAlerts = activeSignals.slice(0, 20).map(s => ({
@@ -1697,7 +1607,7 @@ function renderLiveAlerts() {
 
   let html = '';
   if (liveAlerts.length > 0) {
-    html += '<h4 style="font-size:12px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Live Signals</h4>';
+    html += '<h4 style="font-size:12px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Reference zone events (history)</h4>';
     html += liveAlerts.map(a => `
       <div class="alert-item ${a.type}">
         <span class="alert-icon">${a.icon}</span>
@@ -1707,7 +1617,7 @@ function renderLiveAlerts() {
     `).join('');
     html += '<div style="margin:12px 0;border-top:1px solid var(--border);"></div>';
   }
-  html += '<h4 style="font-size:12px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">SMC Structure Alerts</h4>';
+  html += '<h4 style="font-size:12px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Current quote status</h4>';
   html += staticAlerts.map(a => `
     <div class="alert-item ${a.type}">
       <span class="alert-icon">${a.icon}</span>
@@ -1722,7 +1632,7 @@ function renderLiveAlerts() {
 // ===== CLOCK =====
 function updateClock() {
   const now = new Date();
-  document.getElementById('clock').textContent = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' (UTC+7)';
+  document.getElementById('clock').textContent = now.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' (UTC+7)';
 }
 
 // ===== RE-RENDER FUNCTIONS =====
@@ -1779,7 +1689,7 @@ function init() {
   });
 
   // Request notification permission
-  if (Notification.permission === 'default') {
+  if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
   }
 
