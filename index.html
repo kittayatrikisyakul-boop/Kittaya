@@ -406,7 +406,8 @@ body {
       <div class="refresh-dot"></div>
       <span id="last-update">Updating...</span>
     </div>
-    <label style="font-size:12px;">ข้อมูล <select id="price-source" onchange="setPriceSource(this.value)" style="background:var(--bg-card);color:var(--text-primary);padding:4px;border:1px solid var(--border);border-radius:4px;"><option value="snapshot">TradingView snapshot</option><option value="daily">Daily reference API</option></select></label>
+    <label style="font-size:12px;">ข้อมูล <select id="price-source" onchange="setPriceSource(this.value)" style="background:var(--bg-card);color:var(--text-primary);padding:4px;border:1px solid var(--border);border-radius:4px;"><option value="ctrader">cTrader · Broker live</option><option value="snapshot">TradingView snapshot</option><option value="daily">Daily reference API</option></select></label>
+    <a href="https://kittaya.onrender.com/auth/ctrader" style="color:var(--blue);font-size:12px;">เชื่อม cTrader</a><a href="https://kittaya.onrender.com/auth/ctrader/accounts" style="color:var(--text-secondary);font-size:12px;">เลือกบัญชี</a>
     <span id="clock"></span>
   </div>
 </div>
@@ -1044,22 +1045,27 @@ const TRADINGVIEW_SNAPSHOT = {
   }
 };
 let priceMode = 'snapshot';
-try { if (localStorage.getItem('marketDataMode') === 'daily') priceMode = 'daily'; } catch {}
+try { const saved=localStorage.getItem('marketDataMode'); if (['daily','ctrader'].includes(saved)) priceMode=saved; } catch {}
+if (new URLSearchParams(location.search).get('ctrader')==='connected') { priceMode='ctrader'; try {localStorage.setItem('marketDataMode','ctrader');history.replaceState(null,'',location.pathname);}catch{} }
 
 // Quote state is shared by overview, details, summary and alerts.
 const dynamicSMC = {};
 const quoteState = {};
 const MAX_QUOTE_AGE_MS = 36 * 60 * 60 * 1000;
 let pricesInFlight = false;
+let brokerFeedId=null;
 
 function quoteUsable(q) {
+  if (q?.kind==='ctrader') return q.connected && Number.isFinite(q.price) && q.price>0 && Number.isFinite(q.timestamp) && q.timestamp<=Date.now()+5000 && Date.now()-q.timestamp<=120000;
   return q && q.kind !== 'snapshot' && Number.isFinite(q.timestamp) && Number.isFinite(q.price) && q.price > 0 && !q.failed &&
     q.timestamp <= Date.now() + 5 * 60 * 1000 && Date.now() - q.timestamp <= MAX_QUOTE_AGE_MS;
 }
 
 function quoteLabel(key) {
   const q = quoteState[key];
+  if (!q && priceMode==='ctrader') return 'รอฟีด cTrader / ไม่มีสัญลักษณ์ในบัญชี';
   if (!q) return key === 'XAUUSD' || key === 'USOIL' ? 'No price feed connected' : 'Waiting for daily reference rate';
+  if (q.kind==='ctrader') return 'cTrader BID · '+new Date(q.timestamp).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'})+' (UTC+7) · '+(quoteUsable(q)?'ราคาล่าสุด':'ข้อมูลค้าง / ขาดการเชื่อมต่อ');
   if (q.kind === 'snapshot') return 'TradingView / OANDA · ตรวจหน้าเว็บ ' + new Date(q.observedAt).toLocaleString('th-TH', {timeZone: 'Asia/Bangkok'}) + ' (UTC+7) · ไม่ทราบเวลา tick';
   const time = new Date(q.timestamp).toLocaleString('th-TH', {timeZone: 'Asia/Bangkok'});
   return `${quoteUsable(q) ? 'Daily reference' : 'Stale / unavailable'} · ${time} (UTC+7)`;
@@ -1070,6 +1076,7 @@ function displayedPrice(key) {
 }
 
 function biasLabel(d) {
+  if (d.live) return d.quoteStale ? 'ข้อมูลค้าง · หยุดสัญญาณ' : d.bias==='bull' ? 'Bullish · H4 confirmed' : d.bias==='bear' ? 'Bearish · H4 confirmed' : 'รอโครงสร้าง H4';
   if (d.snapshot) return 'Snapshot · ไม่มีสัญญาณสด';
   return d.bias === 'bull' ? 'Rising since previous quote' : d.bias === 'bear' ? 'Falling since previous quote' : 'Waiting / unchanged';
 }
@@ -1078,6 +1085,15 @@ function recalculateSMC(key, currentPrice) {
   const base = INSTRUMENTS[key];
   const q = quoteState[key];
   if (!base) return;
+  if (priceMode==='ctrader') {
+    const a=q?.analysis;
+    dynamicSMC[key]={name:base.name,id:base.id,tvSymbol:base.tvSymbol,decimals:base.decimals,
+      bias:'neutral',structure:{type:'Waiting for candles',dir:'neutral',tf:'H4',note:'รอแท่งปิดจาก cTrader'},choch:null,
+      orderBlocks:[],fvg:[],liquidity:[],targets:{bull:[],bear:[]},tp:{entry:[null,null],sl:null,tp1:null,tp2:null,tp3:null,direction:'none'},
+      ...a,live:true,quoteStale:!quoteUsable(q),swingHigh:a?.swingHigh ?? q?.price ?? 0,swingLow:a?.swingLow ?? q?.price ?? 0,
+      plan:a?.plan || 'ยังไม่มีแท่ง H4 ที่ใช้งานได้ · ไม่ใช้ระดับอ้างอิงเดิมสร้างสัญญาณ'};
+    return;
+  }
   const change = quoteUsable(q) && Number.isFinite(q.previousPrice) ? currentPrice - q.previousPrice : 0;
   const bias = change > 0 ? 'bull' : change < 0 ? 'bear' : 'neutral';
   // Keep the supplied reference zones fixed. Moving zones with each tick
@@ -1097,7 +1113,7 @@ function getDynamicData(key) {
 
 // ===== RENDER FUNCTIONS =====
 function fmt(val, decimals) {
-  return typeof val === 'number' ? val.toFixed(decimals) : val;
+  return typeof val === 'number' && Number.isFinite(val) ? val.toFixed(decimals) : val ?? '—';
 }
 
 // Distances use the closest edge of the same reference zone shown on the card.
@@ -1144,7 +1160,7 @@ function renderCardContext(key, d, ob, fvg) {
     </div>
     <div class="card-range-labels"><span>${fmt(d.swingLow, d.decimals)}</span><span class="card-range-percent">${positionLabel}</span><span>${fmt(d.swingHigh, d.decimals)}</span></div>
     <div class="card-proximity">${badges}</div>
-    <div class="card-reference-note">โซนอ้างอิง · ใกล้ ≤2% / เฝ้าดู ≤5% ของช่วง Swing · ไม่ใช่สัญญาณเข้าเทรด</div>
+    <div class="card-reference-note">${d.live?'โซน H4 จากแท่งปิด cTrader':'โซนอ้างอิง'} · ใกล้ ≤2% / เฝ้าดู ≤5% ของช่วง Swing · ไม่ใช่คำสั่งเข้าเทรด</div>
   </div>`;
 }
 
@@ -1184,15 +1200,15 @@ function renderOverviewCard(key, data) {
       </div>
       <div class="card-levels" style="margin-top:8px;">
         <div class="level-item">
-          <span class="level-label">Nearest reference OB</span>
+          <span class="level-label">${d.live?'Nearest H4 OB':'Nearest reference OB'}</span>
           <span class="level-value ${mainOB ? (mainOB.type === 'demand' ? 'dem' : 'sup') : ''}">${mainOB ? fmt(mainOB.zone[0], d.decimals) + '-' + fmt(mainOB.zone[1], d.decimals) : '—'}</span>
         </div>
         <div class="level-item">
-          <span class="level-label">Reference target</span>
+          <span class="level-label">${d.live?'Pivot target':'Reference target'}</span>
           <span class="level-value ${d.bias === 'bull' ? 'dem' : 'res'}">${fmt(d.targets[d.bias === 'bull' ? 'bull' : 'bear'][0], d.decimals)}</span>
         </div>
       </div>
-      <div class="card-tp-row" title="Manually supplied reference targets; not live signals">
+      <div class="card-tp-row" style="${d.live?'display:none':''}" title="Manually supplied reference targets; not live signals">
         <span class="card-tp-badge tp1">Reference TP1: ${fmt(d.tp.tp1, d.decimals)}</span>
         <span class="card-tp-badge tp2">Ref TP2: ${fmt(d.tp.tp2, d.decimals)}</span>
         <span class="card-tp-badge tp3">Ref TP3: ${fmt(d.tp.tp3, d.decimals)}</span>
@@ -1306,12 +1322,12 @@ function renderDetailView(key, data) {
 
     <div class="detail-grid">
       <div class="detail-card">
-        <h3>Reference Order Blocks (manual)</h3>
+        <h3>${d.live?'H4 Order Blocks · closed candles':'Reference Order Blocks (manual)'}</h3>
         <table class="level-table">${obRows}</table>
       </div>
 
       <div class="detail-card">
-        <h3>Reference FVG & Liquidity (manual)</h3>
+        <h3>${d.live?'H4 FVG & Liquidity':'Reference FVG & Liquidity (manual)'}</h3>
         <table class="level-table">${fvgRows}</table>
         <div style="margin-top:12px;">
           <table class="level-table">${liqRows}</table>
@@ -1336,15 +1352,15 @@ function renderDetailView(key, data) {
           <tr><td class="type-col">Equilibrium</td><td class="zone-col">${fmt((d.swingHigh + d.swingLow) / 2, d.decimals)}</td></tr>
         </table>
 
-        <h3 style="margin-top:16px;">Reference Targets (manual)</h3>
+        <h3 style="margin-top:16px;">${d.live?'Confirmed pivot targets':'Reference Targets (manual)'}</h3>
         <table class="level-table">
           <tr><td class="type-col" style="color:var(--green);">Bullish</td><td class="zone-col">${d.targets.bull.map(t => fmt(t, d.decimals)).join(' → ')}</td></tr>
           <tr><td class="type-col" style="color:var(--red);">Bearish</td><td class="zone-col">${d.targets.bear.map(t => fmt(t, d.decimals)).join(' → ')}</td></tr>
         </table>
       </div>
 
-      <div class="detail-card">
-        <h3>🎯 Reference Entry / TP / SL (manual)</h3>
+      <div class="detail-card" style="${d.live && d.tp.direction==='none' ? 'display:none' : ''}">
+        <h3>${d.live?'Entry / TP / SL · ยังไม่มี setup ยืนยัน':'🎯 Reference Entry / TP / SL (manual)'}</h3>
         <div class="tp-card entry">
           <div>
             <div class="tp-card-label">ENTRY ${d.tp.direction === 'long' ? '(BUY)' : '(SELL)'}</div>
@@ -1386,7 +1402,7 @@ function renderDetailView(key, data) {
             const entryMid = (d.tp.entry[0] + d.tp.entry[1]) / 2;
             const risk = Math.abs(entryMid - d.tp.sl);
             const reward = Math.abs(d.tp.tp2 - entryMid);
-            const rr = risk > 0 ? (reward / risk).toFixed(1) : '—';
+            const rr = Number.isFinite(d.tp.sl) && Number.isFinite(d.tp.tp2) && risk > 0 ? (reward / risk).toFixed(1) : '—';
             return '1:' + rr + ' (TP2)';
           })()}
         </div>
@@ -1513,7 +1529,8 @@ function seedTradingViewSnapshot() {
 
 function renderPriceSourceState() {
   document.getElementById('price-source').value = priceMode;
-  document.getElementById('data-mode-badge').textContent = priceMode === 'snapshot' ? 'SNAPSHOT' : 'DAILY REFERENCE';
+  document.getElementById('data-mode-badge').textContent = priceMode === 'ctrader' ? 'CTRADER · WAITING' : priceMode === 'snapshot' ? 'SNAPSHOT' : 'DAILY REFERENCE';
+  if(priceMode==='ctrader') {document.getElementById('data-source-note').textContent='ฟีด BID จากบัญชี cTrader ที่เลือก · แสดงผลประมาณทุก 2 วินาที · โครงสร้างและโซน H4 รอแท่งปิด · หยุดแจ้งเตือนเมื่อราคาเกิน 120 วินาที · กราฟ TradingView เป็นคนละฟีด'; return;}
   document.getElementById('data-source-note').textContent = priceMode === 'snapshot'
     ? 'ราคา snapshot ที่อ่านจากหน้าสาธารณะ TradingView / OANDA ไม่ใช่ฟีดเรียลไทม์ · เวลาที่ระบุคือเวลาตรวจหน้าเว็บ ไม่ใช่เวลา tick · ไม่อัปเดตเองและไม่ใช้สร้างสัญญาณสด · OB/FVG/TP/SL ยังเป็นระดับอ้างอิงเดิม'
     : 'ราคา Forex เป็นอัตราอ้างอิงรายวัน ไม่ใช่ราคาเรียลไทม์จาก TradingView · ทอง/น้ำมันยังไม่มีฟีดราคา · OB/FVG/TP/SL เป็นระดับอ้างอิงเดิม';
@@ -1522,7 +1539,7 @@ function renderPriceSourceState() {
 }
 
 function setPriceSource(mode) {
-  if (mode !== 'snapshot' && mode !== 'daily') return;
+  if (!['snapshot','daily','ctrader'].includes(mode)) return;
   // Avoid mixing asynchronous daily responses with snapshot state.
   if (pricesInFlight) {
     document.getElementById('price-source').value = priceMode;
@@ -1541,7 +1558,7 @@ function setPriceSource(mode) {
   renderSummaryTable();
   refreshActiveDetail();
   renderLiveAlerts();
-  if (mode === 'daily') fetchPrices();
+  if (mode !== 'snapshot') fetchPrices();
 }
 
 function toggleAlerts(type) {
@@ -1590,6 +1607,7 @@ function getForexPrice(pair) {
 }
 
 async function fetchPrices() {
+  if (priceMode==='ctrader') { await fetchBrokerPrices(); return; }
   if (priceMode === 'snapshot') { renderPriceSourceState(); return; }
   if (pricesInFlight) return;
   pricesInFlight = true;
@@ -1627,6 +1645,43 @@ async function fetchPrices() {
       'Checked: ' + new Date().toLocaleTimeString('th-TH', {timeZone: 'Asia/Bangkok'}) +
       (gotForex ? ' · Daily reference rates (not real-time)' : ' · API unavailable; alerts paused');
   } finally { pricesInFlight = false; }
+}
+
+async function fetchBrokerPrices() {
+  if(pricesInFlight)return;
+  pricesInFlight=true;
+  try {
+    const response=await fetch('/api/ctrader/market',{cache:'no-store',signal:AbortSignal.timeout(15000)});
+    if(!response.ok)throw new Error(response.status===401?'กรุณากดเชื่อม cTrader':response.status===409?'กรุณากดเลือกบัญชี':'ยังรับข้อมูล cTrader ไม่ได้');
+    const data=await response.json();
+    if(data.feedId && data.feedId!==brokerFeedId) {
+      brokerFeedId=data.feedId;
+      for(const state of [quoteState,lastRealPrices,dynamicSMC])for(const key of Object.keys(state))delete state[key];
+      activeSignals=[];updateSignalBadge();
+    }
+    for(const key of Object.keys(INSTRUMENTS)) {
+      const item=data.symbols?.[key],previous=quoteState[key];
+      if(!item || !Number.isFinite(item.price) || !Number.isFinite(item.timestamp)) {
+        if(previous)previous.connected=false;
+        recalculateSMC(key,lastRealPrices[key]);continue;
+      }
+      quoteState[key]={...item,kind:'ctrader',connected:data.connected && item.fresh,previousPrice:previous?.price ?? null};
+      lastRealPrices[key]=item.price;
+      recalculateSMC(key,item.price);
+      if(previous && quoteUsable(previous) && item.timestamp>previous.timestamp && item.price!==previous.price) {
+        checkSignals(key,item.price,previous.price,getDynamicData(key));
+      }
+    }
+    const fresh=Object.values(quoteState).filter(quoteUsable).length;
+    document.getElementById('data-mode-badge').textContent=fresh?'CTRADER · LIVE BID':'CTRADER · STALE / WAITING';
+    document.getElementById('last-update').textContent=data.error || (data.connecting?'กำลังเชื่อม / โหลดแท่ง H4 · ':'')+fresh+' สินทรัพย์มีราคาภายใน 120 วินาที';
+  } catch(error) {
+    for(const [key,q]of Object.entries(quoteState)){q.connected=false;recalculateSMC(key,q.price);}
+    document.getElementById('data-mode-badge').textContent='CTRADER · DISCONNECTED';
+    document.getElementById('last-update').textContent=error.message;
+  } finally {
+    renderOverview();renderSummaryTable();refreshActiveDetail();renderLiveAlerts();pricesInFlight=false;
+  }
 }
 
 function refreshActiveDetail() {
@@ -1681,14 +1736,16 @@ function updatePriceDisplay(key, price, change, decimals) {
   // Zone marker position
   const data = INSTRUMENTS[key];
   const rangeSize = data.swingHigh - data.swingLow;
-  const pos = Math.max(0, Math.min(100, ((price - data.swingLow) / rangeSize) * 100));
+  const liveData=getDynamicData(key);
+  const actualRange=liveData.swingHigh-liveData.swingLow;
+  const pos = actualRange>0 ? Math.max(0, Math.min(100, ((price-liveData.swingLow)/actualRange)*100)) : 50;
   const marker = document.getElementById('zone-marker-' + key);
   if (marker) marker.style.left = pos + '%';
 }
 
 // ===== SIGNAL DETECTION =====
 function checkSignals(key, price, prevPrice, data) {
-  if (!quoteUsable(quoteState[key]) || !Number.isFinite(prevPrice) || price === prevPrice) return;
+  if ((priceMode==='ctrader' && (!quoteState[key]?.historyReady || !quoteState[key]?.analysis || quoteState[key].analysis.structure.type.startsWith('Waiting'))) || !quoteUsable(quoteState[key]) || !Number.isFinite(prevPrice) || price === prevPrice) return;
 
   const newSignals = [];
 
@@ -1702,7 +1759,7 @@ function checkSignals(key, price, prevPrice, data) {
         newSignals.push({
           key, price, ob,
           type: isDemand ? 'buy' : 'sell',
-          title: (isDemand ? '🟢 Demand reference' : '🔴 Supply reference') + ' zone entry — ' + data.name,
+          title: (isDemand ? '🟢 Demand zone' : '🔴 Supply zone') + ' zone entry — ' + data.name,
           detail: `Price entered ${ob.type === 'demand' ? 'Demand' : 'Supply'} OB: ${fmt(lo, data.decimals)}–${fmt(hi, data.decimals)}\n${ob.note}`,
           level: fmt(lo, data.decimals) + '–' + fmt(hi, data.decimals)
         });
@@ -1720,7 +1777,7 @@ function checkSignals(key, price, prevPrice, data) {
         newSignals.push({
           key, price, fvg,
           type: isBullish ? 'buy' : 'sell',
-          title: (isBullish ? '🟢 Demand reference' : '🔴 Supply reference') + ' zone entry — ' + data.name,
+          title: (isBullish ? '🟢 Bullish FVG' : '🔴 Bearish FVG') + ' zone entry — ' + data.name,
           detail: `Price filling ${fvg.dir} FVG: ${fmt(lo, data.decimals)}–${fmt(hi, data.decimals)}\n${fvg.note}`,
           level: fmt(lo, data.decimals) + '–' + fmt(hi, data.decimals)
         });
@@ -1935,7 +1992,8 @@ function init() {
 
   // Fetch prices immediately, then every 30 seconds
   fetchPrices();
-  setInterval(fetchPrices, 30000);
+  setInterval(() => {if(priceMode!=='ctrader')fetchPrices();}, 30000);
+  setInterval(() => {if(priceMode==='ctrader')fetchPrices();}, 2000);
 
   // Clock
   updateClock();
